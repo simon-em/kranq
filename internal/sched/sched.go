@@ -240,8 +240,14 @@ func (s *Scheduler) execute(ctx context.Context, t state.Task) {
 	}
 
 	if code == task.RateLimitExitCode && t.NeedsClaude {
-		until := s.gate.MarkExhausted()
-		fmt.Fprintf(logFile, "claude usage exhausted; the gate reopens at %s\n", until.Format(time.RFC3339))
+		resetsAt, window, _ := gate.ParseExhaustion(s.tailLog(t.ID))
+		until := s.gate.MarkExhaustedUntil(resetsAt, window)
+		if resetsAt.IsZero() {
+			fmt.Fprintf(logFile, "claude usage exhausted; checking again at %s\n", until.Format(time.RFC3339))
+		} else {
+			fmt.Fprintf(logFile, "claude usage exhausted; the %s window resets at %s\n",
+				window, until.Format(time.RFC3339))
+		}
 		_, _ = s.store.Update(t.ID, func(u *state.Task) {
 			u.Status = state.StatusBlocked
 			u.BlockedOn = state.BlockedOnClaude
@@ -293,6 +299,18 @@ func (s *Scheduler) Cancel(id string) error {
 		u.FinishedAt = &finished
 	})
 	return err
+}
+
+func (s *Scheduler) tailLog(id string) string {
+	data, err := os.ReadFile(s.store.LogPath(id))
+	if err != nil {
+		return ""
+	}
+	const tail = 64 << 10
+	if len(data) > tail {
+		data = data[len(data)-tail:]
+	}
+	return string(data)
 }
 
 func gib(n int64) float64 { return float64(n) / (1 << 30) }

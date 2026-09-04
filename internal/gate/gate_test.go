@@ -6,18 +6,16 @@ import (
 	"time"
 )
 
-const (
-	base = 10 * time.Minute
-	max  = 6 * time.Hour
-)
+const retry = time.Minute
 
 func gateAt(t *testing.T, path, token string, clock *time.Time) *Gate {
-	g := New(path, token, base, max)
+	t.Helper()
+	g := New(path, token, retry)
 	g.now = func() time.Time { return *clock }
 	return g
 }
 
-func TestAGateWithNoExhaustionIsOpen(t *testing.T) {
+func TestAFreshGateWithATokenIsOpen(t *testing.T) {
 	now := time.Now()
 	g := gateAt(t, filepath.Join(t.TempDir(), "gate.json"), "tok", &now)
 	if !g.Available() || !g.Present() {
@@ -25,47 +23,64 @@ func TestAGateWithNoExhaustionIsOpen(t *testing.T) {
 	}
 }
 
-func TestBackoffDoublesAndIsCapped(t *testing.T) {
+func TestExhaustionRetriesAtAFixedInterval(t *testing.T) {
 	now := time.Now()
 	g := gateAt(t, filepath.Join(t.TempDir(), "gate.json"), "tok", &now)
-	for _, want := range []time.Duration{base, 2 * base, 4 * base} {
-		g.MarkExhausted()
-		if got := g.State().Backoff; got != want {
-			t.Fatalf("backoff = %v, want %v", got, want)
+	for range 5 {
+		until := g.MarkExhausted()
+		if got := until.Sub(now); got != retry {
+			t.Fatalf("next check in %v, want a flat %v every time; usage can return at any moment, "+
+				"so doubling to hours leaves the machine idle long after it could have run", got, retry)
 		}
-	}
-	for range 20 {
-		g.MarkExhausted()
-	}
-	if got := g.State().Backoff; got != max {
-		t.Errorf("backoff = %v, want it capped at %v", got, max)
+		now = now.Add(retry)
 	}
 }
 
-func TestAHealthyRunResetsTheBackoff(t *testing.T) {
+func TestTheGateReopensWhenTheIntervalElapses(t *testing.T) {
 	now := time.Now()
 	g := gateAt(t, filepath.Join(t.TempDir(), "gate.json"), "tok", &now)
 	g.MarkExhausted()
-	if g.Available() {
-		t.Fatal("the gate should be shut")
-	}
-	g.MarkHealthy()
-	if !g.Available() || g.State().Backoff != 0 {
-		t.Error("a clean run must reopen the gate and clear the backoff")
-	}
-}
-
-func TestTheGateReopensOnItsOwnWhenTheBackoffElapses(t *testing.T) {
-	now := time.Now()
-	g := gateAt(t, filepath.Join(t.TempDir(), "gate.json"), "tok", &now)
-	g.MarkExhausted()
-	now = now.Add(base - time.Second)
+	now = now.Add(retry - time.Second)
 	if g.Available() {
 		t.Error("the gate opened early")
 	}
 	now = now.Add(2 * time.Second)
 	if !g.Available() {
-		t.Error("the gate did not reopen after the backoff")
+		t.Error("the gate did not reopen after the retry interval")
+	}
+}
+
+func TestAKnownResetTimeIsPreferredOverPollingBlindly(t *testing.T) {
+	now := time.Now()
+	g := gateAt(t, filepath.Join(t.TempDir(), "gate.json"), "tok", &now)
+	resets := now.Add(2 * time.Hour)
+
+	until := g.MarkExhaustedUntil(resets, "five_hour window exhausted")
+	if !until.Equal(resets) {
+		t.Errorf("next check at %v, want %v: when claude tells us when the window resets, "+
+			"retrying every minute until then just burns VM boots", until, resets)
+	}
+	if got := g.State().LastReason; got != "five_hour window exhausted" {
+		t.Errorf("reason = %q, want it surfaced so an operator knows why", got)
+	}
+}
+
+func TestAResetTimeInThePastDoesNotShortenTheInterval(t *testing.T) {
+	now := time.Now()
+	g := gateAt(t, filepath.Join(t.TempDir(), "gate.json"), "tok", &now)
+	until := g.MarkExhaustedUntil(now.Add(-time.Hour), "stale")
+	if got := until.Sub(now); got != retry {
+		t.Errorf("next check in %v, want the %v floor; a stale reset time must not cause a hot loop", got, retry)
+	}
+}
+
+func TestACleanRunReopensTheGate(t *testing.T) {
+	now := time.Now()
+	g := gateAt(t, filepath.Join(t.TempDir(), "gate.json"), "tok", &now)
+	g.MarkExhausted()
+	g.MarkHealthy()
+	if !g.Available() || g.State().LastReason != "" {
+		t.Error("a clean run must reopen the gate and clear the reason")
 	}
 }
 
@@ -86,21 +101,19 @@ func TestAClosedGateSurvivesARestart(t *testing.T) {
 func TestRotatingTheTokenOpensAFreshGate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "gate.json")
 	now := time.Now()
-	gateAt(t, path, "old-token", &now).MarkExhausted()
+	gateAt(t, path, "old-token", &now).MarkExhaustedUntil(now.Add(6*time.Hour), "exhausted")
 
 	rotated := gateAt(t, path, "new-token", &now)
 	if !rotated.Available() {
-		t.Error("a new token must get a fresh gate; honouring the old token's backoff left tasks idle for 40 minutes with usage available")
-	}
-	if rotated.State().Backoff != 0 {
-		t.Error("the old backoff carried over to the new token")
+		t.Error("a new token must get a fresh gate; honouring the old token's wait left tasks idle " +
+			"for forty minutes with usage available")
 	}
 }
 
 func TestResetForcesTheGateOpen(t *testing.T) {
 	now := time.Now()
 	g := gateAt(t, filepath.Join(t.TempDir(), "gate.json"), "tok", &now)
-	g.MarkExhausted()
+	g.MarkExhaustedUntil(now.Add(6*time.Hour), "exhausted")
 	g.Reset()
 	if !g.Available() || g.State().Exhaustions != 0 {
 		t.Error("Reset must fully clear the gate, so an operator can act on knowledge forge does not have")
@@ -111,7 +124,7 @@ func TestNoTokenMeansNotPresent(t *testing.T) {
 	now := time.Now()
 	g := gateAt(t, filepath.Join(t.TempDir(), "gate.json"), "", &now)
 	if g.Present() {
-		t.Error("Present must be false with no token, so a claude task is rejected at submit rather than failing later")
+		t.Error("Present must be false with no token, so a claude task is rejected at submit rather than later")
 	}
 	if TokenID("") != "" {
 		t.Error("an absent token has no id")
@@ -120,10 +133,7 @@ func TestNoTokenMeansNotPresent(t *testing.T) {
 
 func TestTokenIDDoesNotLeakTheToken(t *testing.T) {
 	id := TokenID("sk-ant-oat01-supersecret")
-	if len(id) != 16 {
-		t.Errorf("TokenID = %q, want 16 hex chars", id)
-	}
-	if id == "sk-ant-oat01-supersecret" {
-		t.Error("TokenID returned the token itself")
+	if len(id) != 16 || id == "sk-ant-oat01-supersecret" {
+		t.Errorf("TokenID = %q, want a short hash", id)
 	}
 }

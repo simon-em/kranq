@@ -280,3 +280,22 @@ func TestStreamedToolCallsReachTheLog(t *testing.T) {
 		}
 	}
 }
+
+func TestExhaustionEmitsTheResetTimeForTheScheduler(t *testing.T) {
+	dir := t.TempDir()
+	fake := "#!/usr/bin/env bash\n" +
+		"echo '{\"type\":\"rate_limit_event\",\"rate_limit_info\":{\"status\":\"rejected\",\"resetsAt\":1788468000,\"rateLimitType\":\"five_hour\",\"unifiedWindows\":{\"five_hour\":{\"utilization\":1}}}}'\n" +
+		"echo '{\"type\":\"result\",\"subtype\":\"success\",\"result\":\"stopped\"}'\n"
+	if err := os.WriteFile(dir+"/claude", []byte(fake), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	script := build(t, "name: x\nrepo: dx\nsteps:\n  - claude: hi\n", nil)
+	cmd := exec.Command("bash")
+	cmd.Stdin = strings.NewReader(script)
+	cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, _ := cmd.CombinedOutput()
+
+	if !strings.Contains(string(out), "FORGE-GATE exhausted resets_at=1788468000 window=five_hour") {
+		t.Errorf("the reset time was not surfaced, so the scheduler can only poll blindly:\n%s", out)
+	}
+}

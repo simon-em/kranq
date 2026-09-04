@@ -67,6 +67,18 @@ the same machine. A test asserts a `ci-run-*` instance is not claimed.
 step 3. Real tasks depend on this: `maintenance.yaml` sets `PR_BRANCH` in step 1 and reads it
 in step 4. `internal/task` has a test pinning it.
 
+**Every Claude stream carries a `rate_limit_event`, even a perfectly healthy one.** Detecting
+exhaustion by matching the text `rate_limit` would therefore mark every task exhausted and
+wedge the gate permanently. Match on `rate_limit_info.status != "allowed"` instead. The
+renderer emits `FORGE-GATE exhausted resets_at=<unix> window=<name>` when it happens, and
+`gate.ParseExhaustion` reads it back out of the task log so the scheduler can wait for the
+actual reset rather than polling. There is a test for the healthy case specifically.
+
+**The usage gate retries at a flat interval (default 1 minute), not an exponential backoff.**
+Usage can return at any moment, so doubling to hours leaves the machine idle long after it
+could have run. When Claude tells us when the window resets, the gate waits for that instead,
+because retrying every minute for three hours would boot a VM each time.
+
 **A task's own reported status outranks its exit code.** `claude -p` exits 0 even when it
 stops to ask a question, so both real tasks write a status file and a later step reads that
 file. Never "simplify" this to trusting the exit code.

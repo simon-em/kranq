@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -57,7 +58,7 @@ func harness(t *testing.T, exec Executor) (*Scheduler, *state.Store, *time.Time)
 		t.Fatal(err)
 	}
 	now := time.Unix(1_780_000_000, 0)
-	g := gate.New(filepath.Join(dir, "gate.json"), "tok", 10*time.Minute, time.Hour)
+	g := gate.New(filepath.Join(dir, "gate.json"), "tok", time.Minute)
 	s := New(Config{
 		MaxVMs: 2, MemoryHeadroom: 2 << 30, PollInterval: time.Hour,
 		TaskTimeout: time.Minute, ClaudeToken: "tok",
@@ -333,4 +334,31 @@ func waitFor(t *testing.T, store *state.Store, id string, want state.Status) sta
 	}
 	t.Fatalf("task %s stayed %q, want %q", id, last.Status, want)
 	return last
+}
+
+func TestExhaustionWaitsForAKnownResetRatherThanPollingBlindly(t *testing.T) {
+	exec := &fakeExec{code: task.RateLimitExitCode}
+	s, store, now := harness(t, exec)
+	queue(t, store, "claude", *now, claudeSpec)
+
+	resets := time.Now().Add(3 * time.Hour)
+	logLine := "FORGE-GATE exhausted resets_at=" + strconv.FormatInt(resets.Unix(), 10) + " window=five_hour\n"
+	if err := os.MkdirAll(store.Dir("claude"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(store.LogPath("claude"), []byte(logLine), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Tick(context.Background())
+	waitFor(t, store, "claude", state.StatusBlocked)
+
+	remaining := s.gate.State().Remaining
+	if remaining < 2*time.Hour {
+		t.Errorf("next check in %v, want it to wait for the known reset instead of retrying every "+
+			"minute for three hours and burning a VM boot each time", remaining)
+	}
+	if got := s.gate.State().LastReason; got != "five_hour" {
+		t.Errorf("reason = %q, want the window name surfaced", got)
+	}
 }

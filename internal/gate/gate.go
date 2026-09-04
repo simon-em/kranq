@@ -15,15 +15,15 @@ type State struct {
 	Present     bool          `json:"present"`
 	Available   bool          `json:"available"`
 	Remaining   time.Duration `json:"remaining"`
-	Backoff     time.Duration `json:"backoff"`
 	Exhaustions int           `json:"exhaustions"`
+	LastReason  string        `json:"last_reason,omitempty"`
 }
 
 type persisted struct {
 	TokenID     string    `json:"token_id"`
 	Until       time.Time `json:"until"`
-	Backoff     time.Duration
-	Exhaustions int `json:"exhaustions"`
+	Exhaustions int       `json:"exhaustions"`
+	LastReason  string    `json:"last_reason,omitempty"`
 }
 
 type Gate struct {
@@ -31,13 +31,12 @@ type Gate struct {
 	path    string
 	tokenID string
 	present bool
-	base    time.Duration
-	max     time.Duration
+	retry   time.Duration
 	now     func() time.Time
 
 	until       time.Time
-	backoff     time.Duration
 	exhaustions int
+	reason      string
 }
 
 func TokenID(token string) string {
@@ -48,13 +47,17 @@ func TokenID(token string) string {
 	return hex.EncodeToString(sum[:8])
 }
 
-func New(path, token string, base, max time.Duration) *Gate {
+const DefaultRetry = time.Minute
+
+func New(path, token string, retry time.Duration) *Gate {
+	if retry <= 0 {
+		retry = DefaultRetry
+	}
 	g := &Gate{
 		path:    path,
 		tokenID: TokenID(token),
 		present: token != "",
-		base:    base,
-		max:     max,
+		retry:   retry,
 		now:     time.Now,
 	}
 	g.load()
@@ -74,8 +77,8 @@ func (g *Gate) load() {
 		return
 	}
 	g.until = p.Until
-	g.backoff = p.Backoff
 	g.exhaustions = p.Exhaustions
+	g.reason = p.LastReason
 }
 
 func (g *Gate) save() {
@@ -85,8 +88,8 @@ func (g *Gate) save() {
 	data, err := json.Marshal(persisted{
 		TokenID:     g.tokenID,
 		Until:       g.until,
-		Backoff:     g.backoff,
 		Exhaustions: g.exhaustions,
+		LastReason:  g.reason,
 	})
 	if err != nil {
 		return
@@ -104,18 +107,19 @@ func (g *Gate) Available() bool {
 }
 
 func (g *Gate) MarkExhausted() time.Time {
+	return g.MarkExhaustedUntil(time.Time{}, "")
+}
+
+func (g *Gate) MarkExhaustedUntil(resetsAt time.Time, reason string) time.Time {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.backoff == 0 {
-		g.backoff = g.base
-	} else {
-		g.backoff *= 2
-	}
-	if g.backoff > g.max {
-		g.backoff = g.max
-	}
 	g.exhaustions++
-	g.until = g.now().Add(g.backoff)
+	g.reason = reason
+	next := g.now().Add(g.retry)
+	if !resetsAt.IsZero() && resetsAt.After(next) {
+		next = resetsAt
+	}
+	g.until = next
 	g.save()
 	return g.until
 }
@@ -123,20 +127,20 @@ func (g *Gate) MarkExhausted() time.Time {
 func (g *Gate) MarkHealthy() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.backoff == 0 && g.until.IsZero() {
+	if g.until.IsZero() && g.reason == "" {
 		return
 	}
-	g.backoff = 0
 	g.until = time.Time{}
+	g.reason = ""
 	g.save()
 }
 
 func (g *Gate) Reset() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.backoff = 0
 	g.until = time.Time{}
 	g.exhaustions = 0
+	g.reason = ""
 	g.save()
 }
 
@@ -152,7 +156,7 @@ func (g *Gate) State() State {
 		Present:     g.present,
 		Available:   remaining == 0,
 		Remaining:   remaining,
-		Backoff:     g.backoff,
 		Exhaustions: g.exhaustions,
+		LastReason:  g.reason,
 	}
 }
