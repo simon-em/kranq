@@ -36,6 +36,7 @@ func init() {
 		"run":      {"run <task.yaml> [flags]", "run a task in a disposable VM", runRun},
 		"version":  {"version [--json]", "print the forge version", runVersion},
 		"validate": {"validate <task.yaml>...", "check that a task spec parses and compiles", runValidate},
+		"vm":       {"vm ls|shell|rm", "inspect or remove job VMs", runVM},
 		"render":   {"render <task.yaml>", "print the bash script a spec compiles to", runRender},
 		"help":     {"help [command]", "show usage", runHelp},
 	}

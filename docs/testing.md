@@ -74,3 +74,22 @@ Step headers can appear out of order relative to step output, because `ci_step` 
 stderr and step bodies write to stdout, and both go through one pipe with different buffering.
 The system forge replaces does this too. The `-o ndjson` event stream planned for phase 2
 fixes it properly; anything sooner would be papering over it.
+
+## Debugging a failed run
+
+By default a job VM is destroyed whether the job passed or failed, which means a failure that
+only reproduces on the build machine cannot be investigated. Keep it:
+
+```sh
+forge run spec.yaml --repo dx --branch main --keep-vm on-failure
+forge vm ls                       # which VMs are alive, and whose task they were
+forge vm shell <task-id>          # a shell inside it
+forge vm shell <task-id> -- cat /tmp/whatever
+forge vm rm --all                 # they are not cleaned up on their own
+```
+
+`--keep-vm on-failure` also keeps the VM when the run failed for an infrastructure reason with
+no exit code at all, which is the case most worth looking at.
+
+A kept VM holds several GB and a concurrency slot until removed, so `forge vm ls` is worth
+checking after a debugging session.

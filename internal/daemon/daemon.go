@@ -131,6 +131,7 @@ func (d *Daemon) Submit(req ipc.SubmitRequest) (state.Task, error) {
 		Branch:   req.Branch,
 		Label:    req.Label,
 		Env:      req.Env,
+		Keep:     req.Keep,
 	}, svc.Capabilities{
 		HasClaudeToken: d.gate.Present(),
 		TotalMemory:    snapshot.TotalBytes,
@@ -144,6 +145,13 @@ func (d *Daemon) Submit(req ipc.SubmitRequest) (state.Task, error) {
 	}
 	d.sched.Wake()
 	return t, nil
+}
+
+func (d *Daemon) RecordVM(taskID, vmName string, kept bool) {
+	_, _ = d.store.Update(taskID, func(u *state.Task) {
+		u.VMName = vmName
+		u.VMKept = kept
+	})
 }
 
 func (d *Daemon) List() []state.Task                { return d.store.List() }

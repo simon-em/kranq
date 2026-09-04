@@ -32,6 +32,7 @@ type SubmitRequest struct {
 	Branch   string
 	Label    string
 	Env      map[string]string
+	Keep     string
 }
 
 func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (state.Task, error) {
@@ -76,6 +77,7 @@ func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (st
 		CPUs:        spec.Resources.CPUs,
 		SpecYAML:    string(req.SpecYAML),
 		Env:         req.Env,
+		Keep:        req.Keep,
 		CreatedAt:   now,
 	}, nil
 }

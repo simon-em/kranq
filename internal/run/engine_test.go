@@ -2,6 +2,7 @@ package run
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -184,5 +185,93 @@ func TestAMissingSetupFileFailsBeforeAnyVMIsCreated(t *testing.T) {
 	}
 	if len(f.Names()) != 0 {
 		t.Errorf("instances were created before the spec was validated: %v", f.Names())
+	}
+}
+
+func TestKeepNeverDestroysEvenOnFailure(t *testing.T) {
+	f := vm.NewFake()
+	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
+		if strings.Contains(script, "forge-task.sh") {
+			return 1, nil
+		}
+		return 0, nil
+	}
+	req := request(t)
+	req.Keep = KeepNever
+	res, err := engine(t, f).Execute(context.Background(), req, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kept || f.Exists(res.VMName) {
+		t.Error("the default must destroy the VM, or a busy machine fills with corpses")
+	}
+}
+
+func TestKeepOnFailureKeepsAFailedRunForInspection(t *testing.T) {
+	f := vm.NewFake()
+	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
+		if strings.Contains(script, "forge-task.sh") {
+			return 1, nil
+		}
+		return 0, nil
+	}
+	req := request(t)
+	req.Keep = KeepOnFailure
+	res, err := engine(t, f).Execute(context.Background(), req, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Kept || !f.Exists(res.VMName) {
+		t.Error("a failure that only reproduces on the build machine is exactly what needs keeping")
+	}
+}
+
+func TestKeepOnFailureStillDestroysASuccess(t *testing.T) {
+	f := vm.NewFake()
+	req := request(t)
+	req.Keep = KeepOnFailure
+	res, err := engine(t, f).Execute(context.Background(), req, io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Kept || f.Exists(res.VMName) {
+		t.Error("a passing run has nothing to inspect")
+	}
+}
+
+func TestKeepOnFailureKeepsAVMWhenTheRunErroredRatherThanExited(t *testing.T) {
+	f := vm.NewFake()
+	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
+		if strings.Contains(script, "forge-task.sh") {
+			return -1, errors.New("the guest went away")
+		}
+		return 0, nil
+	}
+	req := request(t)
+	req.Keep = KeepOnFailure
+	res, _ := engine(t, f).Execute(context.Background(), req, io.Discard)
+	if res.VMName == "" || !f.Exists(res.VMName) {
+		t.Error("an infrastructure failure is the case most worth inspecting, and has no exit code")
+	}
+}
+
+func TestKeepAlwaysKeepsASuccess(t *testing.T) {
+	f := vm.NewFake()
+	req := request(t)
+	req.Keep = KeepAlways
+	res, err := engine(t, f).Execute(context.Background(), req, io.Discard)
+	if err != nil || !res.Kept || !f.Exists(res.VMName) {
+		t.Errorf("kept=%v err=%v", res.Kept, err)
+	}
+}
+
+func TestParseKeepRejectsNonsense(t *testing.T) {
+	for _, good := range []string{"", "never", "on-failure", "always"} {
+		if _, ok := ParseKeep(good); !ok {
+			t.Errorf("ParseKeep(%q) was rejected", good)
+		}
+	}
+	if _, ok := ParseKeep("sometimes"); ok {
+		t.Error("a typo must be rejected at the flag, not silently mean never")
 	}
 }

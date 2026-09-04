@@ -49,6 +49,7 @@ func runRun(env Env, args []string) int {
 	remote := fs.String("remote", envOr("FORGE_GIT_REMOTE"), "git remote base")
 	local := fs.Bool("local", false, "run in this process instead of submitting to the daemon")
 	detach := fs.Bool("detach", false, "print the task id and exit without following")
+	keep := fs.String("keep-vm", "never", "keep the job VM: never, on-failure, always")
 	timeout := fs.Duration("timeout", 4*time.Hour, "ceiling on the run")
 	forward := envFlag{}
 	fs.Var(forward, "env", "NAME=VALUE, or bare NAME to forward it from this environment")
@@ -59,6 +60,10 @@ func runRun(env Env, args []string) int {
 	if len(positional) != 1 {
 		fmt.Fprintln(env.Stderr, "usage: forge run <task.yaml> [flags]")
 		fs.PrintDefaults()
+		return exitcode.Usage
+	}
+	if _, ok := run.ParseKeep(*keep); !ok {
+		fmt.Fprintf(env.Stderr, "forge: --keep-vm %q: want never, on-failure or always\n", *keep)
 		return exitcode.Usage
 	}
 	if *repo == "" || *branch == "" {
@@ -91,7 +96,7 @@ func runRun(env Env, args []string) int {
 	if !*local {
 		return submitAndFollow(env, submission{
 			spec: string(specRaw), repo: *repo, branch: *branch, label: *label,
-			env: forward, artifacts: *artifacts, detach: *detach,
+			env: forward, artifacts: *artifacts, detach: *detach, keep: *keep,
 		})
 	}
 
@@ -108,6 +113,7 @@ func runRun(env Env, args []string) int {
 	}
 	defer os.RemoveAll(work)
 
+	keepPolicy, _ := run.ParseKeep(*keep)
 	remoteSpec := run.Remote{Base: *remote, Repo: *repo, Token: run.ResolveToken(forward)}
 	if remoteSpec.Token == "" {
 		sock, agentErr := sshagent.Ensure(forgeHome())
@@ -140,6 +146,7 @@ func runRun(env Env, args []string) int {
 		Checkout:    checkout,
 		ArtifactDir: *artifacts,
 		RemoteBase:  *remote,
+		Keep:        keepPolicy,
 	}, env.Stderr)
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
@@ -194,6 +201,7 @@ type submission struct {
 	env       map[string]string
 	artifacts string
 	detach    bool
+	keep      string
 }
 
 func submitAndFollow(env Env, s submission) int {
@@ -203,7 +211,7 @@ func submitAndFollow(env Env, s submission) int {
 	}
 	ctx := context.Background()
 	t, err := client.Submit(ctx, ipc.SubmitRequest{
-		Spec: s.spec, Repo: s.repo, Branch: s.branch, Label: s.label, Env: s.env,
+		Spec: s.spec, Repo: s.repo, Branch: s.branch, Label: s.label, Env: s.env, Keep: s.keep,
 	})
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)

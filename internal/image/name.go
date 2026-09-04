@@ -44,8 +44,16 @@ func ProjectName(repo, baseName string, p project.Project) string {
 	return fmt.Sprintf("%s-%s-%x", ProjectPrefix, Slugify(repo), h.Sum(nil)[:5])
 }
 
+const MaxRunName = 40
+
 func RunName(repo, label, taskID string) string {
-	return fmt.Sprintf("%s-%s-%s-%s", RunPrefix, Slugify(repo), Slugify(label), Slugify(taskID))
+	sum := sha256.Sum256([]byte(taskID))
+	suffix := fmt.Sprintf("-%x", sum[:4])
+	base := fmt.Sprintf("%s-%s-%s", RunPrefix, Slugify(repo), Slugify(label))
+	if room := MaxRunName - len(suffix); len(base) > room {
+		base = strings.Trim(base[:room], "-")
+	}
+	return base + suffix
 }
 
 func Managed(name string) bool {

@@ -43,8 +43,13 @@ with a `file://` remote on the host.
 clone destination as `'~/work'` makes git create a directory literally named `~`. forge uses
 `"$HOME/work"` in double quotes. There is a regression test in `internal/run/checkout_test.go`.
 
-**macOS refuses a unix socket path over 104 bytes.** `internal/sockpath` shortens
-deterministically. This bites the ssh agent socket and will bite the daemon socket.
+**macOS refuses a unix socket path over 104 bytes, and this has bitten three times.** The ssh
+agent socket and the daemon socket both go through `internal/sockpath`, which shortens
+deterministically. The third case is subtler: **a Lima instance name is part of a socket path**,
+because Lima builds `~/.lima/<name>/ssh.sock.<16 digits>`. So `image.RunName` caps names at
+`MaxRunName` (40) with a hash suffix rather than embedding the whole task id. A smoke test
+passed at exactly 104 before this was fixed, so the failure was latent and length-dependent.
+Any new path under `~/.lima` or `$FORGE_HOME` needs the same arithmetic.
 
 **`ssh -T git@bitbucket.org` succeeding does not mean the agent has identities.** A key on
 disk works for the host, but Lima's `forwardAgent` forwards an *agent*, so an empty agent
@@ -88,6 +93,10 @@ dedicated build machine and surprising on a dev Mac. `FORGE_MEMORY_HEADROOM_MB` 
 **A task's own reported status outranks its exit code.** `claude -p` exits 0 even when it
 stops to ask a question, so both real tasks write a status file and a later step reads that
 file. Never "simplify" this to trusting the exit code.
+
+**A defer that records into the result needs named return values.** `Execute` returns
+`(res Result, err error)` for exactly this reason: the teardown defer decides whether the VM
+was kept, and with unnamed returns `return res, nil` copies the value before the defer runs.
 
 ## Layout
 

@@ -59,6 +59,7 @@ func newDaemon() (*daemon.Daemon, error) {
 		return nil, err
 	}
 	runner.ArtifactsDir = d.ArtifactsDir
+	runner.Record = d.RecordVM
 	return d, nil
 }
 

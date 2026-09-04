@@ -18,6 +18,36 @@ const (
 	ArtifactsDir = "ci-artifacts"
 )
 
+type KeepPolicy string
+
+const (
+	KeepNever     KeepPolicy = "never"
+	KeepOnFailure KeepPolicy = "on-failure"
+	KeepAlways    KeepPolicy = "always"
+)
+
+func ParseKeep(v string) (KeepPolicy, bool) {
+	switch KeepPolicy(v) {
+	case "", KeepNever:
+		return KeepNever, true
+	case KeepOnFailure:
+		return KeepOnFailure, true
+	case KeepAlways:
+		return KeepAlways, true
+	}
+	return KeepNever, false
+}
+
+func (k KeepPolicy) keeps(exitCode int, failed bool) bool {
+	switch k {
+	case KeepAlways:
+		return true
+	case KeepOnFailure:
+		return failed || exitCode != 0
+	}
+	return false
+}
+
 type Request struct {
 	TaskID      string
 	Repo        string
@@ -28,6 +58,7 @@ type Request struct {
 	Checkout    string
 	ArtifactDir string
 	RemoteBase  string
+	Keep        KeepPolicy
 }
 
 type Result struct {
@@ -35,6 +66,7 @@ type Result struct {
 	VMName    string
 	Image     string
 	Artifacts bool
+	Kept      bool
 }
 
 type Engine struct {
@@ -43,8 +75,7 @@ type Engine struct {
 	Assets map[string][]byte
 }
 
-func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (Result, error) {
-	var res Result
+func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res Result, err error) {
 
 	proj, err := project.Load(req.Checkout)
 	if err != nil {
@@ -63,7 +94,14 @@ func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (Resul
 	if err := e.Driver.Clone(ctx, plan.Project, name, vm.Resources{}); err != nil {
 		return res, fmt.Errorf("cloning the project image: %w", err)
 	}
+	failed := true
 	defer func() {
+		if req.Keep.keeps(res.ExitCode, failed) {
+			res.Kept = true
+			fmt.Fprintf(out, "keeping %s for inspection; `forge vm shell %s` to open it, "+
+				"`forge vm rm %s` when done\n", name, req.TaskID, name)
+			return
+		}
 		fmt.Fprintf(out, "destroying %s\n", name)
 		if err := e.Images.Destroy(context.WithoutCancel(ctx), name); err != nil {
 			fmt.Fprintf(out, "warning: could not destroy %s: %v\n", name, err)
@@ -87,6 +125,7 @@ func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (Resul
 		return res, err
 	}
 	res.ExitCode = code
+	failed = false
 	res.Artifacts = e.collect(ctx, name, req, out)
 	return res, nil
 }

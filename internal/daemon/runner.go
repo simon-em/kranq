@@ -15,6 +15,7 @@ type Runner struct {
 	RemoteBase   string
 	ArtifactsDir func(id string) string
 	AgentRoot    string
+	Record       func(taskID, vmName string, kept bool)
 }
 
 func (r *Runner) Execute(ctx context.Context, t state.Task, script string, out *os.File) (int, error) {
@@ -39,6 +40,7 @@ func (r *Runner) Execute(ctx context.Context, t state.Task, script string, out *
 		return -1, err
 	}
 
+	keep, _ := run.ParseKeep(t.Keep)
 	res, err := r.Engine.Execute(ctx, run.Request{
 		TaskID:      t.ID,
 		Repo:        t.Repo,
@@ -49,7 +51,11 @@ func (r *Runner) Execute(ctx context.Context, t state.Task, script string, out *
 		Checkout:    checkout,
 		ArtifactDir: r.ArtifactsDir(t.ID),
 		RemoteBase:  r.RemoteBase,
+		Keep:        keep,
 	}, out)
+	if r.Record != nil {
+		r.Record(t.ID, res.VMName, res.Kept)
+	}
 	if err != nil {
 		return -1, err
 	}

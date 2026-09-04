@@ -14,6 +14,7 @@ type SubmitRequest struct {
 	Branch string            `json:"branch,omitempty"`
 	Label  string            `json:"label,omitempty"`
 	Env    map[string]string `json:"env,omitempty"`
+	Keep   string            `json:"keep,omitempty"`
 }
 
 type Status struct {
