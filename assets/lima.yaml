@@ -1,0 +1,93 @@
+minimumLimaVersion: 2.0.0
+
+base:
+- template:_images/debian-13
+
+vmType: vz
+cpus: 3
+memory: 1GiB
+disk: 40GiB
+
+containerd:
+  system: false
+  user: false
+
+ssh:
+  forwardAgent: true
+
+portForwards:
+- guestPortRange: [1, 65535]
+  ignore: true
+
+provision:
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update
+    apt-get install -y --no-install-recommends \
+      build-essential pkg-config git curl wget ca-certificates gnupg xz-utils unzip \
+      libpq-dev postgresql-client \
+      libvips-dev libvips-tools libpoppler-glib8 libheif1 file \
+      libssl-dev libyaml-dev libreadline-dev zlib1g-dev libffi-dev \
+      libgdbm-dev libncurses-dev uuid-dev libxml2-dev libxslt1-dev \
+      python3 python3-venv \
+      tmux procps iproute2 less vim-tiny netcat-openbsd
+
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    command -v docker >/dev/null 2>&1 && exit 0
+    export DEBIAN_FRONTEND=noninteractive
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian trixie stable" \
+      > /etc/apt/sources.list.d/docker.list
+    apt-get update
+    apt-get install -y --no-install-recommends \
+      docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    systemctl enable --now docker.service
+    usermod -aG docker "{{.User}}"
+    printf '#!/bin/sh\nexec docker compose "$@"\n' > /usr/local/bin/docker-compose
+    chmod +x /usr/local/bin/docker-compose
+
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eux -o pipefail
+    [ -x /usr/local/bin/overmind ] && exit 0
+    arch="$(dpkg --print-architecture)"
+    curl -fsSL "https://github.com/DarthSim/overmind/releases/download/v{{.Param.overmindVersion}}/overmind-v{{.Param.overmindVersion}}-linux-${arch}.gz" \
+      | gunzip > /usr/local/bin/overmind
+    chmod +x /usr/local/bin/overmind
+
+- mode: system
+  script: |
+    #!/bin/bash
+    set -eu
+    mkdir -p /opt/ci
+    chown "{{.User}}:{{.User}}" /opt/ci
+    printf 'export PATH=$HOME/.local/bin:/opt/ci/bin:$PATH\n' > /etc/profile.d/ci.sh
+
+- mode: user
+  script: |
+    #!/bin/bash
+    set -eu
+    command -v claude >/dev/null 2>&1 && exit 0
+    curl -fsSL https://claude.ai/install.sh | bash -s -- {{.Param.claudeVersion}}
+
+- mode: user
+  script: |
+    #!/bin/bash
+    set -eu
+    git config --global advice.detachedHead false
+    mkdir -p -m 0700 ~/.ssh
+    ssh-keyscan -t rsa,ecdsa,ed25519 bitbucket.org github.com >> ~/.ssh/known_hosts 2>/dev/null
+    sort -u -o ~/.ssh/known_hosts ~/.ssh/known_hosts
+
+param:
+  overmindVersion: "2.5.1"
+  claudeVersion: "stable"

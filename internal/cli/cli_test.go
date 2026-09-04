@@ -10,7 +10,7 @@ import (
 	"github.com/effetmonstre/forge/internal/exitcode"
 )
 
-func run(t *testing.T, args ...string) (int, string, string) {
+func invoke(t *testing.T, args ...string) (int, string, string) {
 	t.Helper()
 	var out, errb bytes.Buffer
 	code := dispatch(Env{Stdout: &out, Stderr: &errb}, args)
@@ -29,7 +29,7 @@ func write(t *testing.T, name, body string) string {
 const goodSpec = "name: demo\nsteps:\n  - name: greet\n    run: echo hello\n"
 
 func TestNoArgumentsIsAUsageError(t *testing.T) {
-	code, _, errb := run(t)
+	code, _, errb := invoke(t)
 	if code != exitcode.Usage {
 		t.Errorf("exit = %d, want %d", code, exitcode.Usage)
 	}
@@ -39,7 +39,7 @@ func TestNoArgumentsIsAUsageError(t *testing.T) {
 }
 
 func TestUnknownCommandIsAUsageError(t *testing.T) {
-	code, _, errb := run(t, "wat")
+	code, _, errb := invoke(t, "wat")
 	if code != exitcode.Usage {
 		t.Errorf("exit = %d, want %d", code, exitcode.Usage)
 	}
@@ -49,7 +49,7 @@ func TestUnknownCommandIsAUsageError(t *testing.T) {
 }
 
 func TestHelpGoesToStdoutAndSucceeds(t *testing.T) {
-	code, out, _ := run(t, "--help")
+	code, out, _ := invoke(t, "--help")
 	if code != exitcode.OK {
 		t.Errorf("exit = %d, want 0", code)
 	}
@@ -59,7 +59,7 @@ func TestHelpGoesToStdoutAndSucceeds(t *testing.T) {
 }
 
 func TestVersionIsDataOnStdout(t *testing.T) {
-	code, out, errb := run(t, "version")
+	code, out, errb := invoke(t, "version")
 	if code != exitcode.OK || strings.TrimSpace(out) != Version {
 		t.Errorf("exit=%d out=%q, want 0 and %q", code, out, Version)
 	}
@@ -69,7 +69,7 @@ func TestVersionIsDataOnStdout(t *testing.T) {
 }
 
 func TestValidateAcceptsAGoodSpec(t *testing.T) {
-	code, out, errb := run(t, "validate", write(t, "ok.yaml", goodSpec))
+	code, out, errb := invoke(t, "validate", write(t, "ok.yaml", goodSpec))
 	if code != exitcode.OK {
 		t.Fatalf("exit = %d, want 0; stderr:\n%s", code, errb)
 	}
@@ -79,7 +79,7 @@ func TestValidateAcceptsAGoodSpec(t *testing.T) {
 }
 
 func TestValidateRejectsAnInvalidSpec(t *testing.T) {
-	code, _, errb := run(t, "validate", write(t, "bad.yaml", "steps:\n  - run: true\n"))
+	code, _, errb := invoke(t, "validate", write(t, "bad.yaml", "steps:\n  - run: true\n"))
 	if code != exitcode.InvalidSpec {
 		t.Errorf("exit = %d, want %d", code, exitcode.InvalidSpec)
 	}
@@ -89,7 +89,7 @@ func TestValidateRejectsAnInvalidSpec(t *testing.T) {
 }
 
 func TestValidateReportsAMissingFileDistinctly(t *testing.T) {
-	code, _, _ := run(t, "validate", filepath.Join(t.TempDir(), "absent.yaml"))
+	code, _, _ := invoke(t, "validate", filepath.Join(t.TempDir(), "absent.yaml"))
 	if code != exitcode.NoSuchFile {
 		t.Errorf("exit = %d, want %d so a caller can tell it apart from a bad spec", code, exitcode.NoSuchFile)
 	}
@@ -98,7 +98,7 @@ func TestValidateReportsAMissingFileDistinctly(t *testing.T) {
 func TestValidateChecksEveryFileAndReturnsTheWorst(t *testing.T) {
 	good := write(t, "a.yaml", goodSpec)
 	bad := write(t, "b.yaml", "steps: []\n")
-	code, out, _ := run(t, "validate", good, bad)
+	code, out, _ := invoke(t, "validate", good, bad)
 	if code == exitcode.OK {
 		t.Error("a bad file among good ones must not exit 0")
 	}
@@ -108,7 +108,7 @@ func TestValidateChecksEveryFileAndReturnsTheWorst(t *testing.T) {
 }
 
 func TestRenderCompilesToRunnableBash(t *testing.T) {
-	code, out, errb := run(t, "render", write(t, "ok.yaml", goodSpec))
+	code, out, errb := invoke(t, "render", write(t, "ok.yaml", goodSpec))
 	if code != exitcode.OK {
 		t.Fatalf("exit = %d, want 0; stderr:\n%s", code, errb)
 	}
@@ -124,7 +124,39 @@ func TestRenderCompilesToRunnableBash(t *testing.T) {
 }
 
 func TestRenderNeedsExactlyOneFile(t *testing.T) {
-	if code, _, _ := run(t, "render"); code != exitcode.Usage {
+	if code, _, _ := invoke(t, "render"); code != exitcode.Usage {
 		t.Errorf("exit = %d, want %d", code, exitcode.Usage)
+	}
+}
+
+func TestRunAcceptsFlagsAfterTheFileName(t *testing.T) {
+	spec := write(t, "t.yaml", goodSpec)
+	code, _, errb := invoke(t, "run", spec, "--repo", "dx", "--branch", "main", "--local=false")
+	if code != exitcode.Misconfigured {
+		t.Fatalf("exit = %d, want %d; flags after the positional must be parsed, not ignored", code, exitcode.Misconfigured)
+	}
+	if !strings.Contains(errb, "only --local is implemented") {
+		t.Errorf("--local=false after the file name was not seen: %q", errb)
+	}
+}
+
+func TestRunNeedsARepoAndBranch(t *testing.T) {
+	t.Setenv("CI_REPO", "")
+	t.Setenv("BITBUCKET_REPO_SLUG", "")
+	t.Setenv("CI_BRANCH", "")
+	t.Setenv("BITBUCKET_BRANCH", "")
+	code, _, errb := invoke(t, "run", write(t, "t.yaml", goodSpec))
+	if code != exitcode.Misconfigured {
+		t.Errorf("exit = %d, want %d", code, exitcode.Misconfigured)
+	}
+	if !strings.Contains(errb, "--repo") {
+		t.Errorf("stderr should name the missing flag: %q", errb)
+	}
+}
+
+func TestRunReportsAMissingSpecFileBeforeDoingAnything(t *testing.T) {
+	code, _, _ := invoke(t, "run", filepath.Join(t.TempDir(), "gone.yaml"), "--repo", "dx", "--branch", "main")
+	if code != exitcode.NoSuchFile {
+		t.Errorf("exit = %d, want %d", code, exitcode.NoSuchFile)
 	}
 }

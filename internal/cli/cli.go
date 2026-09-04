@@ -27,6 +27,7 @@ var commands map[string]Command
 
 func init() {
 	commands = map[string]Command{
+		"run":      {"run <task.yaml> [flags]", "run a task in a disposable VM", runRun},
 		"version":  {"version [--json]", "print the forge version", runVersion},
 		"validate": {"validate <task.yaml>...", "check that a task spec parses and compiles", runValidate},
 		"render":   {"render <task.yaml>", "print the bash script a spec compiles to", runRender},

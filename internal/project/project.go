@@ -84,11 +84,15 @@ func loadBasekey(checkout string) ([]byte, []KeyFile, error) {
 	return raw, files, scan.Err()
 }
 
-func (s Setup) MemoryGiB() (float64, bool) {
-	if s.Memory == "" {
+func (s Setup) MemoryGiB() (float64, bool) { return gib(s.Memory) }
+
+func (s Setup) DiskGiB() (float64, bool) { return gib(s.Disk) }
+
+func gib(v string) (float64, bool) {
+	if v == "" {
 		return 0, false
 	}
-	n, err := task.ParseMemory(s.Memory)
+	n, err := task.ParseMemory(v)
 	if err != nil {
 		return 0, false
 	}
