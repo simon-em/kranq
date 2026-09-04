@@ -23,9 +23,22 @@ Measured on a 16 GiB M-series Mac with Lima 2.2.0:
 The 17s figure is the one that matters: `limactl clone` is an APFS copy-on-write clone, so a
 warm image costs almost nothing to start from.
 
-## Next: phase 2, the daemon
+## Phase 2, in progress
 
-In order:
+Done so far: `internal/state`, `internal/gate`, `internal/svc.Prepare`, `internal/hostres`,
+`internal/sched`. The scheduler carries the `running -> lost` rule, so **the duplicate-PR bug
+described below is fixed**, with a test that fails if ci-runner's requeue behaviour is
+reintroduced.
+
+Still to do: `internal/ipc` (net/http over a unix socket), `forge daemon`, `forge run`
+defaulting to submit-and-follow, and re-adoption of in-flight jobs across a daemon restart.
+
+Re-adoption is deliberately last of those. Marking a restarted task `lost` is already correct
+and safe; re-adoption only makes it *cheaper*, by not throwing away a 45-minute run. It needs
+the job to outlive the daemon, which means an exec shim recording pgid and start time, so it
+is a real chunk of work rather than a tweak.
+
+### Original plan for the remaining pieces
 
 1. `internal/state` — the task store. Same on-disk layout as ci-runner's
    (`$FORGE_HOME/tasks/<id>/{task.json,log,artifacts/}`) but single-writer with an in-memory
