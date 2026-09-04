@@ -19,7 +19,7 @@ import (
 )
 
 func newManager() (*image.Manager, vm.Driver) {
-	driver := vm.Lima{Home: os.Getenv("FORGE_LIMA_HOME")}
+	driver := vm.Lima{Bin: limactlPath(forgeHome()), Home: os.Getenv("FORGE_LIMA_HOME")}
 	return &image.Manager{Driver: driver, Template: assets.LimaTemplate}, driver
 }
 

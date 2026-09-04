@@ -12,8 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	"crypto/sha256"
+	"encoding/hex"
 	"github.com/effetmonstre/forge/assets"
+
 	"github.com/effetmonstre/forge/internal/daemon"
+	"github.com/effetmonstre/forge/internal/deps"
 	"github.com/effetmonstre/forge/internal/exitcode"
 	"github.com/effetmonstre/forge/internal/image"
 	"github.com/effetmonstre/forge/internal/ipc"
@@ -22,15 +26,27 @@ import (
 )
 
 func daemonConfig() daemon.Config {
+	home := forgeHome()
 	return daemon.Config{
-		Home:           forgeHome(),
+		Home:           home,
 		Version:        Version,
 		MaxVMs:         envInt("FORGE_MAX_VMS", 2),
 		MemoryHeadroom: int64(envInt("FORGE_MEMORY_HEADROOM_MB", 2048)) << 20,
-		ClaudeToken:    os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"),
+		ClaudeToken:    claudeToken(home),
 		GitRemote:      envOr("FORGE_GIT_REMOTE"),
 		LimaHome:       os.Getenv("FORGE_LIMA_HOME"),
 	}
+}
+
+func claudeToken(home string) string {
+	if v := os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"); v != "" {
+		return v
+	}
+	stored, err := daemon.LoadEnv(home)
+	if err != nil {
+		return ""
+	}
+	return stored["CLAUDE_CODE_OAUTH_TOKEN"]
 }
 
 func envInt(name string, fallback int) int {
@@ -47,7 +63,7 @@ func newDaemon() (*daemon.Daemon, error) {
 	if cfg.GitRemote == "" {
 		cfg.GitRemote = defaultRemote
 	}
-	driver := vm.Lima{Home: cfg.LimaHome}
+	driver := vm.Lima{Bin: limactlPath(cfg.Home), Home: cfg.LimaHome}
 	engine := &run.Engine{
 		Driver: driver,
 		Images: &image.Manager{Driver: driver, Template: assets.LimaTemplate},
@@ -258,4 +274,17 @@ func connect(env Env, autostart bool) (*ipc.Client, int) {
 	}
 	fmt.Fprintln(env.Stderr, "forge: started the local daemon")
 	return client, exitcode.OK
+}
+
+func fingerprint(v string) string {
+	sum := sha256.Sum256([]byte(v))
+	return hex.EncodeToString(sum[:6])
+}
+
+func limactlPath(home string) string {
+	lima := deps.Lima{Root: home}
+	if lima.Installed() {
+		return lima.Binary()
+	}
+	return ""
 }

@@ -98,6 +98,15 @@ file. Never "simplify" this to trusting the exit code.
 `(res Result, err error)` for exactly this reason: the teardown defer decides whether the VM
 was kept, and with unnamed returns `return res, nil` copies the value before the defer runs.
 
+**Secrets never go in the launchd plist.** `~/Library/LaunchAgents` is world-readable. The
+daemon reads `$FORGE_HOME/env` (0600) at startup instead, and the plist carries only
+`FORGE_HOME` and `PATH`. A test asserts the rendered plist contains no credential at all.
+
+**The daemon under launchd has almost no environment.** Anything it needs must come from
+`$FORGE_HOME/env` or the plist, not from your shell. `claudeToken()` reads the environment
+first so a one-off override works, then falls back to the env file, which is the path that
+actually matters in production.
+
 ## Layout
 
 ```

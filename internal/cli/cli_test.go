@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/effetmonstre/forge/internal/daemon"
 	"github.com/effetmonstre/forge/internal/exitcode"
 )
 
@@ -200,5 +201,27 @@ func TestRunReportsAMissingSpecFileBeforeDoingAnything(t *testing.T) {
 	code, _, _ := invoke(t, "run", filepath.Join(t.TempDir(), "gone.yaml"), "--repo", "dx", "--branch", "main")
 	if code != exitcode.NoSuchFile {
 		t.Errorf("exit = %d, want %d", code, exitcode.NoSuchFile)
+	}
+}
+
+func TestClaudeTokenFallsBackToTheStoredEnvFile(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FORGE_HOME", home)
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "")
+
+	if got := claudeToken(home); got != "" {
+		t.Fatalf("token = %q with nothing configured", got)
+	}
+	if err := daemon.SetEnv(home, "CLAUDE_CODE_OAUTH_TOKEN", "stored-token"); err != nil {
+		t.Fatal(err)
+	}
+	if got := claudeToken(home); got != "stored-token" {
+		t.Errorf("token = %q, want the one from the env file; the daemon is started by launchd "+
+			"with no token in its environment, so this fallback is the only way it gets one", got)
+	}
+
+	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "from-environment")
+	if got := claudeToken(home); got != "from-environment" {
+		t.Errorf("token = %q, want the environment to win for a one-off override", got)
 	}
 }

@@ -27,18 +27,21 @@ var commands map[string]Command
 
 func init() {
 	commands = map[string]Command{
-		"cancel":   {"cancel <id>...", "cancel queued or running tasks", runCancel},
-		"daemon":   {"daemon run|start|stop|status", "manage the local daemon", runDaemon},
-		"image":    {"image ls|build|prune", "manage the cached VM images", runImage},
-		"logs":     {"logs <id> [-f]", "print or follow a task's log", runLogs},
-		"ps":       {"ps [-a]", "list tasks", runPS},
-		"status":   {"status [--json]", "queue, machine and claude state", runStatus},
-		"run":      {"run <task.yaml> [flags]", "run a task in a disposable VM", runRun},
-		"version":  {"version [--json]", "print the forge version", runVersion},
-		"validate": {"validate <task.yaml>...", "check that a task spec parses and compiles", runValidate},
-		"vm":       {"vm ls|shell|rm", "inspect or remove job VMs", runVM},
-		"render":   {"render <task.yaml>", "print the bash script a spec compiles to", runRender},
-		"help":     {"help [command]", "show usage", runHelp},
+		"auth":      {"auth claude [--stdin|--show|--clear]", "store the claude token", runAuth},
+		"cancel":    {"cancel <id>...", "cancel queued or running tasks", runCancel},
+		"install":   {"install [--with-daemon]", "install forge and its dependencies", runInstall},
+		"uninstall": {"uninstall [--purge]", "remove forge", runUninstall},
+		"daemon":    {"daemon run|start|stop|status", "manage the local daemon", runDaemon},
+		"image":     {"image ls|build|prune", "manage the cached VM images", runImage},
+		"logs":      {"logs <id> [-f]", "print or follow a task's log", runLogs},
+		"ps":        {"ps [-a]", "list tasks", runPS},
+		"status":    {"status [--json]", "queue, machine and claude state", runStatus},
+		"run":       {"run <task.yaml> [flags]", "run a task in a disposable VM", runRun},
+		"version":   {"version [--json]", "print the forge version", runVersion},
+		"validate":  {"validate <task.yaml>...", "check that a task spec parses and compiles", runValidate},
+		"vm":        {"vm ls|shell|rm", "inspect or remove job VMs", runVM},
+		"render":    {"render <task.yaml>", "print the bash script a spec compiles to", runRender},
+		"help":      {"help [command]", "show usage", runHelp},
 	}
 }
 
