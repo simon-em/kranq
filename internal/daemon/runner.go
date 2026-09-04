@@ -1,0 +1,57 @@
+package daemon
+
+import (
+	"context"
+	"fmt"
+	"os"
+
+	"github.com/effetmonstre/forge/internal/run"
+	"github.com/effetmonstre/forge/internal/sshagent"
+	"github.com/effetmonstre/forge/internal/state"
+)
+
+type Runner struct {
+	Engine       *run.Engine
+	RemoteBase   string
+	ArtifactsDir func(id string) string
+	AgentRoot    string
+}
+
+func (r *Runner) Execute(ctx context.Context, t state.Task, script string, out *os.File) (int, error) {
+	remote := run.Remote{Base: r.RemoteBase, Repo: t.Repo, Token: run.ResolveToken(t.Env)}
+	if remote.Token == "" {
+		sock, err := sshagent.Ensure(r.AgentRoot)
+		if err != nil {
+			return -1, err
+		}
+		os.Setenv("SSH_AUTH_SOCK", sock)
+	}
+
+	work, err := os.MkdirTemp("", "forge-task-*")
+	if err != nil {
+		return -1, err
+	}
+	defer os.RemoveAll(work)
+
+	checkout := work + "/repo"
+	fmt.Fprintf(out, "checking out %s of %s\n", t.Branch, t.Repo)
+	if err := run.HostCheckout(ctx, remote, t.Branch, checkout); err != nil {
+		return -1, err
+	}
+
+	res, err := r.Engine.Execute(ctx, run.Request{
+		TaskID:      t.ID,
+		Repo:        t.Repo,
+		Ref:         t.Branch,
+		Label:       t.Label,
+		Script:      script,
+		Env:         t.Env,
+		Checkout:    checkout,
+		ArtifactDir: r.ArtifactsDir(t.ID),
+		RemoteBase:  r.RemoteBase,
+	}, out)
+	if err != nil {
+		return -1, err
+	}
+	return res.ExitCode, nil
+}

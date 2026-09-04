@@ -30,8 +30,15 @@ Done so far: `internal/state`, `internal/gate`, `internal/svc.Prepare`, `interna
 described below is fixed**, with a test that fails if ci-runner's requeue behaviour is
 reintroduced.
 
-Still to do: `internal/ipc` (net/http over a unix socket), `forge daemon`, `forge run`
-defaulting to submit-and-follow, and re-adoption of in-flight jobs across a daemon restart.
+Done since: `internal/ipc`, `internal/daemon`, and the CLI for all of it. `forge run` submits
+to the daemon by default, follows the log, pulls artifacts and exits with the task's own code;
+`--local` remains as a break-glass path that bypasses the queue. `forge ps|logs|cancel|status`
+and `forge daemon run|start|stop|status` exist. The daemon autostarts on first use.
+
+Validated on this Mac end to end: autostart, submit, queue, follow, artifacts back over the
+socket, correct exit code, 20s against a warm image.
+
+Still to do in phase 2: re-adoption of in-flight jobs across a daemon restart.
 
 Re-adoption is deliberately last of those. Marking a restarted task `lost` is already correct
 and safe; re-adoption only makes it *cheaper*, by not throwing away a 45-minute run. It needs

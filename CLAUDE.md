@@ -79,6 +79,12 @@ Usage can return at any moment, so doubling to hours leaves the machine idle lon
 could have run. When Claude tells us when the window resets, the gate waits for that instead,
 because retrying every minute for three hours would boot a VM each time.
 
+**Memory admission is conservative, and on a busy workstation it will block tasks.**
+`vm_stat` free+inactive+speculative+purgeable on a laptop with a browser open can be 3GiB of
+16GiB, and the default 2GiB headroom then leaves room for almost nothing. This is correct on a
+dedicated build machine and surprising on a dev Mac. `FORGE_MEMORY_HEADROOM_MB` tunes it, and
+`forge status` always says which task is waiting and why.
+
 **A task's own reported status outranks its exit code.** `claude -p` exits 0 even when it
 stops to ask a question, so both real tasks write a status file and a later step reads that
 file. Never "simplify" this to trusting the exit code.

@@ -69,7 +69,7 @@ func imageBuild(env Env, args []string) int {
 		return exitcode.Usage
 	}
 	if *remote == "" {
-		*remote = "git@bitbucket.org:effetmonstre"
+		*remote = defaultRemote
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

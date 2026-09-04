@@ -27,7 +27,12 @@ var commands map[string]Command
 
 func init() {
 	commands = map[string]Command{
+		"cancel":   {"cancel <id>...", "cancel queued or running tasks", runCancel},
+		"daemon":   {"daemon run|start|stop|status", "manage the local daemon", runDaemon},
 		"image":    {"image ls|build|prune", "manage the cached VM images", runImage},
+		"logs":     {"logs <id> [-f]", "print or follow a task's log", runLogs},
+		"ps":       {"ps [-a]", "list tasks", runPS},
+		"status":   {"status [--json]", "queue, machine and claude state", runStatus},
 		"run":      {"run <task.yaml> [flags]", "run a task in a disposable VM", runRun},
 		"version":  {"version [--json]", "print the forge version", runVersion},
 		"validate": {"validate <task.yaml>...", "check that a task spec parses and compiles", runValidate},

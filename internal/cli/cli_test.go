@@ -2,6 +2,8 @@ package cli
 
 import (
 	"bytes"
+	"flag"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -130,17 +132,56 @@ func TestRenderNeedsExactlyOneFile(t *testing.T) {
 }
 
 func TestRunAcceptsFlagsAfterTheFileName(t *testing.T) {
+	isolate(t)
 	spec := write(t, "t.yaml", goodSpec)
-	code, _, errb := invoke(t, "run", spec, "--repo", "dx", "--branch", "main", "--local=false")
-	if code != exitcode.Misconfigured {
-		t.Fatalf("exit = %d, want %d; flags after the positional must be parsed, not ignored", code, exitcode.Misconfigured)
+
+	code, _, errb := invoke(t, "run", spec, "--repo", "dx", "--branch", "main")
+
+	if code == exitcode.Misconfigured {
+		t.Fatalf("exit = %d: --repo and --branch after the file name were ignored, which is how "+
+			"Go's flag package behaves without permutation\nstderr: %s", code, errb)
 	}
-	if !strings.Contains(errb, "only --local is implemented") {
-		t.Errorf("--local=false after the file name was not seen: %q", errb)
+	if code != exitcode.Unreachable {
+		t.Errorf("exit = %d, want %d (no daemon), which means the flags were parsed", code, exitcode.Unreachable)
 	}
 }
 
+func TestParsePermutedCollectsPositionalsAroundFlags(t *testing.T) {
+	cases := map[string][]string{
+		"flags first":       {"--repo", "dx", "a.yaml"},
+		"flags last":        {"a.yaml", "--repo", "dx"},
+		"flags either side": {"--branch", "main", "a.yaml", "--repo", "dx"},
+	}
+	for name, args := range cases {
+		fs := flag.NewFlagSet("t", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		repo := fs.String("repo", "", "")
+		branch := fs.String("branch", "", "")
+		positional, err := parsePermuted(fs, args)
+		if err != nil {
+			t.Errorf("%s: %v", name, err)
+			continue
+		}
+		if len(positional) != 1 || positional[0] != "a.yaml" {
+			t.Errorf("%s: positional = %v, want [a.yaml]", name, positional)
+		}
+		if *repo != "dx" && strings.Contains(name, "repo") {
+			t.Errorf("%s: repo = %q", name, *repo)
+		}
+		if name == "flags either side" && (*repo != "dx" || *branch != "main") {
+			t.Errorf("%s: repo=%q branch=%q, want both", name, *repo, *branch)
+		}
+	}
+}
+
+func isolate(t *testing.T) {
+	t.Helper()
+	t.Setenv("FORGE_HOME", t.TempDir())
+	t.Setenv("FORGE_AUTOSTART", "0")
+}
+
 func TestRunNeedsARepoAndBranch(t *testing.T) {
+	isolate(t)
 	t.Setenv("CI_REPO", "")
 	t.Setenv("BITBUCKET_REPO_SLUG", "")
 	t.Setenv("CI_BRANCH", "")
@@ -155,6 +196,7 @@ func TestRunNeedsARepoAndBranch(t *testing.T) {
 }
 
 func TestRunReportsAMissingSpecFileBeforeDoingAnything(t *testing.T) {
+	isolate(t)
 	code, _, _ := invoke(t, "run", filepath.Join(t.TempDir(), "gone.yaml"), "--repo", "dx", "--branch", "main")
 	if code != exitcode.NoSuchFile {
 		t.Errorf("exit = %d, want %d", code, exitcode.NoSuchFile)

@@ -13,11 +13,15 @@ import (
 	"github.com/effetmonstre/forge/assets"
 	"github.com/effetmonstre/forge/internal/exitcode"
 	"github.com/effetmonstre/forge/internal/image"
+	"github.com/effetmonstre/forge/internal/ipc"
 	"github.com/effetmonstre/forge/internal/run"
 	"github.com/effetmonstre/forge/internal/sshagent"
+	"github.com/effetmonstre/forge/internal/state"
 	"github.com/effetmonstre/forge/internal/task"
 	"github.com/effetmonstre/forge/internal/vm"
 )
+
+const defaultRemote = "git@bitbucket.org:effetmonstre"
 
 type envFlag map[string]string
 
@@ -43,7 +47,8 @@ func runRun(env Env, args []string) int {
 	label := fs.String("label", "", "label for the VM and artifacts (default: the task name)")
 	artifacts := fs.String("artifacts", "", "directory to copy ci-artifacts/ into")
 	remote := fs.String("remote", envOr("FORGE_GIT_REMOTE"), "git remote base")
-	local := fs.Bool("local", true, "run in this process rather than submitting to a daemon")
+	local := fs.Bool("local", false, "run in this process instead of submitting to the daemon")
+	detach := fs.Bool("detach", false, "print the task id and exit without following")
 	timeout := fs.Duration("timeout", 4*time.Hour, "ceiling on the run")
 	forward := envFlag{}
 	fs.Var(forward, "env", "NAME=VALUE, or bare NAME to forward it from this environment")
@@ -56,22 +61,23 @@ func runRun(env Env, args []string) int {
 		fs.PrintDefaults()
 		return exitcode.Usage
 	}
-	if !*local {
-		fmt.Fprintln(env.Stderr, "forge: only --local is implemented so far")
-		return exitcode.Misconfigured
-	}
 	if *repo == "" || *branch == "" {
 		fmt.Fprintln(env.Stderr, "forge: set --repo and --branch (or CI_REPO/CI_BRANCH)")
 		return exitcode.Misconfigured
 	}
 	if *remote == "" {
-		*remote = "git@bitbucket.org:effetmonstre"
+		*remote = defaultRemote
 	}
 
-	spec, code, err := loadSpec(positional[0])
+	specRaw, code, err := readSpecFile(positional[0])
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "%s: %v\n", positional[0], err)
 		return code
+	}
+	spec, err := task.Parse(specRaw)
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "%s: %v\n", positional[0], err)
+		return exitcode.InvalidSpec
 	}
 	if *label == "" {
 		*label = spec.Label
@@ -80,6 +86,13 @@ func runRun(env Env, args []string) int {
 		if _, set := forward[name]; !set {
 			forward[name] = value
 		}
+	}
+
+	if !*local {
+		return submitAndFollow(env, submission{
+			spec: string(specRaw), repo: *repo, branch: *branch, label: *label,
+			env: forward, artifacts: *artifacts, detach: *detach,
+		})
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), *timeout)
@@ -171,4 +184,108 @@ func forgeHome() string {
 		return ".forge"
 	}
 	return home + "/.forge"
+}
+
+type submission struct {
+	spec      string
+	repo      string
+	branch    string
+	label     string
+	env       map[string]string
+	artifacts string
+	detach    bool
+}
+
+func submitAndFollow(env Env, s submission) int {
+	client, code := connect(env, true)
+	if client == nil {
+		return code
+	}
+	ctx := context.Background()
+	t, err := client.Submit(ctx, ipc.SubmitRequest{
+		Spec: s.spec, Repo: s.repo, Branch: s.branch, Label: s.label, Env: s.env,
+	})
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		return codeOf(err, exitcode.InternalError)
+	}
+	if s.detach {
+		fmt.Fprintln(env.Stdout, t.ID)
+		return exitcode.OK
+	}
+	fmt.Fprintf(env.Stderr, "forge: task %s queued\n", t.ID)
+	waitForStart(ctx, client, t.ID, env)
+
+	if err := client.Logs(ctx, t.ID, true, env.Stdout); err != nil {
+		fmt.Fprintf(env.Stderr, "forge: log stream ended: %v\n", err)
+	}
+	final, err := client.Get(ctx, t.ID)
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		return exitcode.Unreachable
+	}
+	fetchArtifacts(client, t.ID, s.artifacts, env)
+	return report(env, final)
+}
+
+func report(env Env, t state.Task) int {
+	switch t.Status {
+	case state.StatusSucceeded:
+		fmt.Fprintf(env.Stderr, "forge: %s succeeded\n", t.ID)
+		return exitcode.OK
+	case state.StatusCancelled:
+		fmt.Fprintf(env.Stderr, "forge: %s was cancelled\n", t.ID)
+		return exitcode.Cancelled
+	case state.StatusLost:
+		fmt.Fprintf(env.Stderr, "forge: %s is LOST: %s\n", t.ID, t.LostReason)
+		fmt.Fprintln(env.Stderr, "forge: it may still be running. Check before re-running it.")
+		return exitcode.InternalError
+	case state.StatusFailed:
+		if t.Error != "" {
+			fmt.Fprintf(env.Stderr, "forge: %s failed: %s\n", t.ID, t.Error)
+			return exitcode.CouldNotStart
+		}
+		fmt.Fprintf(env.Stderr, "forge: %s exited %d\n", t.ID, t.ExitCode)
+		return exitcode.FromTask(t.ExitCode)
+	}
+	fmt.Fprintf(env.Stderr, "forge: %s is %s\n", t.ID, t.Status)
+	return exitcode.InternalError
+}
+
+func waitForStart(ctx context.Context, client *ipc.Client, id string, env Env) {
+	reported := ""
+	for {
+		t, err := client.Get(ctx, id)
+		if err != nil || t.Status == state.StatusRunning || t.Terminal() {
+			return
+		}
+		if note := blockedNote(ctx, client, t); note != reported {
+			fmt.Fprintf(env.Stderr, "forge: %s\n", note)
+			reported = note
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(2 * time.Second):
+		}
+	}
+}
+
+func blockedNote(ctx context.Context, client *ipc.Client, t state.Task) string {
+	if t.Status != state.StatusBlocked {
+		return "queued, waiting for a free slot"
+	}
+	switch t.BlockedOn {
+	case state.BlockedOnClaude:
+		if s, err := client.Status(ctx); err == nil && !s.Claude.Available {
+			return fmt.Sprintf("waiting for claude usage, next check in %s",
+				s.Claude.Remaining.Truncate(time.Second))
+		}
+		return "waiting for claude usage"
+	case state.BlockedOnMemory, state.BlockedOnSlots:
+		if s, err := client.Status(ctx); err == nil && s.StopReason != "" {
+			return "waiting: " + s.StopReason
+		}
+	}
+	return "waiting: blocked on " + string(t.BlockedOn)
 }
