@@ -86,14 +86,14 @@ func (m *Manager) Ensure(ctx context.Context, repo, ref string, p project.Projec
 		return plan, nil
 	}
 	if !m.Driver.Exists(plan.Base) {
-		if err := m.buildBase(ctx, plan.Base, out); err != nil {
+		if err := m.BuildBase(ctx, plan.Base, out); err != nil {
 			return plan, err
 		}
 	}
 	return plan, m.buildProject(ctx, plan, repo, ref, p, out)
 }
 
-func (m *Manager) buildBase(ctx context.Context, name string, out io.Writer) error {
+func (m *Manager) BuildBase(ctx context.Context, name string, out io.Writer) error {
 	fmt.Fprintf(out, "building base image %s\n", name)
 	_ = m.Destroy(ctx, name)
 	if err := m.Driver.CreateFromTemplate(ctx, name, m.Template, out); err != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/effetmonstre/forge/internal/exitcode"
 	"github.com/effetmonstre/forge/internal/image"
 	"github.com/effetmonstre/forge/internal/run"
+	"github.com/effetmonstre/forge/internal/sshagent"
 	"github.com/effetmonstre/forge/internal/task"
 	"github.com/effetmonstre/forge/internal/vm"
 )
@@ -95,6 +96,14 @@ func runRun(env Env, args []string) int {
 	defer os.RemoveAll(work)
 
 	remoteSpec := run.Remote{Base: *remote, Repo: *repo, Token: run.ResolveToken(forward)}
+	if remoteSpec.Token == "" {
+		sock, agentErr := sshagent.Ensure(forgeHome())
+		if agentErr != nil {
+			fmt.Fprintf(env.Stderr, "forge: %v\n", agentErr)
+			return exitcode.Misconfigured
+		}
+		os.Setenv("SSH_AUTH_SOCK", sock)
+	}
 	checkout := work + "/repo"
 	fmt.Fprintf(env.Stderr, "checking out %s of %s\n", *branch, *repo)
 	if err := run.HostCheckout(ctx, remoteSpec, *branch, checkout); err != nil {
@@ -151,4 +160,15 @@ func parsePermuted(fs *flag.FlagSet, args []string) ([]string, error) {
 		positional = append(positional, fs.Arg(0))
 		args = fs.Args()[1:]
 	}
+}
+
+func forgeHome() string {
+	if v := os.Getenv("FORGE_HOME"); v != "" {
+		return v
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".forge"
+	}
+	return home + "/.forge"
 }

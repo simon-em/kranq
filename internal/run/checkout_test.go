@@ -51,3 +51,16 @@ func TestResolveTokenPrefersTheMostSpecific(t *testing.T) {
 		t.Errorf("an empty value must not count as a token, got %q", got)
 	}
 }
+
+func TestCloneDestinationIsNotSingleQuoted(t *testing.T) {
+	dest := `"$HOME/work"`
+	for _, r := range []Remote{{Base: base, Repo: "dx"}, {Base: base, Repo: "dx", Token: "t"}} {
+		got := r.CloneCommand("main", dest)
+		if !strings.HasSuffix(got, dest) {
+			t.Errorf("command = %q, want it to end with an expandable %s", got, dest)
+		}
+		if strings.Contains(got, `'~/work'`) || strings.Contains(got, `'$HOME`) {
+			t.Errorf("the destination was quoted so the shell cannot expand it, which makes git create a directory literally named ~: %q", got)
+		}
+	}
+}

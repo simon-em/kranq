@@ -27,6 +27,7 @@ var commands map[string]Command
 
 func init() {
 	commands = map[string]Command{
+		"image":    {"image ls|build|prune", "manage the cached VM images", runImage},
 		"run":      {"run <task.yaml> [flags]", "run a task in a disposable VM", runRun},
 		"version":  {"version [--json]", "print the forge version", runVersion},
 		"validate": {"validate <task.yaml>...", "check that a task spec parses and compiles", runValidate},

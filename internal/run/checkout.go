@@ -32,11 +32,11 @@ func splitSSHBase(base string) (host, workspace string) {
 func (r Remote) CloneCommand(ref, dest string) string {
 	if r.Token == "" {
 		return fmt.Sprintf("git clone --depth 1 --branch %s %s %s",
-			shellQuote(ref), shellQuote(r.sshURL()), shellQuote(dest))
+			shellQuote(ref), shellQuote(r.sshURL()), dest)
 	}
 	helper := `'!f() { echo username=x-token-auth; echo "password=$FORGE_GIT_TOKEN"; }; f'`
 	return fmt.Sprintf("git -c credential.helper= -c credential.helper=%s clone --depth 1 --branch %s %s %s",
-		helper, shellQuote(ref), shellQuote(r.httpsURL()), shellQuote(dest))
+		helper, shellQuote(ref), shellQuote(r.httpsURL()), dest)
 }
 
 func ResolveToken(env map[string]string) string {

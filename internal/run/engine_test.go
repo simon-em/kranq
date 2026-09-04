@@ -121,9 +121,9 @@ func TestTheJobRunsInAFreshCheckoutOfTheRequestedRef(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"rm -rf ~/work",
+		`rm -rf "$HOME/work"`,
 		"--branch 'ci/lima'",
-		"cd ~/work",
+		`cd "$HOME/work"`,
 		"exec bash /tmp/forge-task.sh",
 		"export MAINTENANCE_SCAN_URL='dx.ca'",
 		"export FORGE_GIT_TOKEN='s3cret'",

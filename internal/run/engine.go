@@ -78,8 +78,9 @@ func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (Resul
 	}
 
 	remote := Remote{Base: req.RemoteBase, Repo: req.Repo, Token: ResolveToken(req.Env)}
-	script := fmt.Sprintf("set -euo pipefail\nrm -rf ~/%s\n%s\ncd ~/%s\nexec bash /tmp/forge-task.sh\n",
-		WorkDir, remote.CloneCommand(req.Ref, "~/"+WorkDir), WorkDir)
+	work := `"$HOME/` + WorkDir + `"`
+	script := fmt.Sprintf("set -euo pipefail\nrm -rf %s\n%s\ncd %s\nexec bash /tmp/forge-task.sh\n",
+		work, remote.CloneCommand(req.Ref, work), work)
 
 	code, err := e.Driver.Shell(ctx, name, e.exports(req)+script, out)
 	if err != nil {
@@ -144,7 +145,8 @@ func (e *Engine) collect(ctx context.Context, name string, req Request, out io.W
 		return false
 	}
 	guest := "~/" + WorkDir + "/" + ArtifactsDir
-	if code, err := e.Driver.Shell(ctx, name, "test -d "+guest, io.Discard); err != nil || code != 0 {
+	probe := `test -d "$HOME/` + WorkDir + "/" + ArtifactsDir + `"`
+	if code, err := e.Driver.Shell(ctx, name, probe, io.Discard); err != nil || code != 0 {
 		return false
 	}
 	if err := os.MkdirAll(req.ArtifactDir, 0o755); err != nil {
