@@ -9,26 +9,45 @@ It replaces `ci-runner` plus the two bash clients in `infrastructure/ci/`.
 
 ## Status
 
-Phase 0. The pure core is in place and the CLI can parse, validate and compile a task spec.
-Nothing runs a job yet.
+It runs real jobs. There is no daemon or queue yet, so a run happens in the foreground of the
+CLI process. See [docs/status.md](docs/status.md).
 
 ```sh
-forge validate ci/tasks/maintenance.yaml
-forge render   ci/tasks/maintenance.yaml    # the bash a spec compiles to
-forge version
+forge run <spec.yaml> --repo dx --branch ci/lima --artifacts ./out
+forge image ls|build|prune
+forge validate|render|version
 ```
 
-`render` is byte-identical to `ci-runner`'s `ci-task-validate --script`, which is how the
-port of `internal/task` was verified against the real maintenance task.
+Measured on a 16 GiB M-series Mac: a base image builds in 153s, dx's project layer in 289s,
+and a job against the warm image runs in 17s, because `limactl clone` is a copy-on-write
+clone.
 
 ## Layout
 
 ```
 main.go                  os.Exit(cli.Main(os.Args))
+assets/                  lima.yaml + mcp/*.py, embedded in the binary
 internal/cli/            subcommand dispatch and terminal output
 internal/task/           the task schema, and compiling a spec to one bash script
+internal/project/        ci/setup.yaml and ci/basekey.txt
+internal/image/          content-addressed naming, the two-layer cache, build, prune
+internal/vm/             the limactl driver, behind an interface with a fake
+internal/run/            one job end to end
+internal/sshagent/       ssh agent handling, when no token was forwarded
+internal/sockpath/       the macOS 104-byte unix socket limit
 internal/exitcode/       the exit code contract
 ```
+
+## Two image layers
+
+The **base** is the same for every project: Debian 13, Docker, libvips, overmind, the Claude
+CLI. It is rebuilt when `assets/lima.yaml` changes or when it is older than the TTL, which is
+folded into the image name so an expiry invalidates everything built on it.
+
+The **project layer** is the repo's `ci/setup.yaml` run once on a clone of the base. This is
+where language versions live, because that is what actually differs between projects. It is
+keyed by the base name, the setup script, and every file listed in `ci/basekey.txt`, so
+changing a lockfile rebuilds just that layer and changing nothing costs nothing.
 
 ## The exit code contract
 
