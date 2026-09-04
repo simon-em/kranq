@@ -88,6 +88,9 @@ func (s *Scheduler) Recover() {
 func (s *Scheduler) markLost(id, reason string) {
 	at := s.now()
 	_, _ = s.store.Update(id, func(u *state.Task) {
+		if u.Terminal() {
+			return
+		}
 		u.Status = state.StatusLost
 		u.LostAt = &at
 		u.LostReason = reason
@@ -266,6 +269,9 @@ func (s *Scheduler) execute(ctx context.Context, t state.Task) {
 		status = state.StatusFailed
 	}
 	_, _ = s.store.Update(t.ID, func(u *state.Task) {
+		if u.Terminal() {
+			return
+		}
 		u.Status = status
 		u.ExitCode = code
 		u.FinishedAt = &finished
@@ -276,11 +282,24 @@ func (s *Scheduler) execute(ctx context.Context, t state.Task) {
 func (s *Scheduler) fail(id, msg string) {
 	finished := s.now()
 	_, _ = s.store.Update(id, func(u *state.Task) {
+		if u.Terminal() {
+			return
+		}
 		u.Status = state.StatusFailed
 		u.Error = msg
 		u.ExitCode = -1
 		u.FinishedAt = &finished
 	})
+}
+
+func (s *Scheduler) Wait(ctx context.Context) {
+	for s.RunningCount() > 0 {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
 }
 
 func (s *Scheduler) Cancel(id string) error {

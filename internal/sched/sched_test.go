@@ -67,6 +67,14 @@ func harness(t *testing.T, exec Executor) (*Scheduler, *state.Store, *time.Time)
 	s.probe = func() hostres.Snapshot {
 		return hostres.Snapshot{TotalBytes: 16 << 30, AvailableBytes: 16 << 30, CPUs: 8, OK: true}
 	}
+	t.Cleanup(func() {
+		for _, task := range store.List() {
+			_ = s.Cancel(task.ID)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		s.Wait(ctx)
+	})
 	return s, store, &now
 }
 
@@ -361,4 +369,25 @@ func TestExhaustionWaitsForAKnownResetRatherThanPollingBlindly(t *testing.T) {
 	if got := s.gate.State().LastReason; got != "five_hour" {
 		t.Errorf("reason = %q, want the window name surfaced", got)
 	}
+}
+
+func TestCancellationIsNotOverwrittenByTheInterruptedRun(t *testing.T) {
+	exec := &fakeExec{hold: make(chan struct{}), started: make(chan string, 1)}
+	s, store, now := harness(t, exec)
+	queue(t, store, "a", *now, shellSpec)
+	s.Tick(context.Background())
+	<-exec.started
+
+	if err := s.Cancel("a"); err != nil {
+		t.Fatal(err)
+	}
+	got := waitFor(t, store, "a", state.StatusCancelled)
+	time.Sleep(50 * time.Millisecond)
+
+	got, _ = store.Get("a")
+	if got.Status != state.StatusCancelled {
+		t.Errorf("status = %q, want cancelled to survive; the executor returning ctx.Err() must not "+
+			"rewrite a deliberate cancellation as lost", got.Status)
+	}
+	close(exec.hold)
 }
