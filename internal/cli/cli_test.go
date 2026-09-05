@@ -291,3 +291,26 @@ func TestConfigNeverPrintsASecret(t *testing.T) {
 		t.Fatalf("config get printed a secret: %d %q", code, out)
 	}
 }
+
+// The daemon may be running VMs in a lima home set in $FORGE_HOME/env. A CLI
+// that only read the environment would list, and offer to delete, a different
+// set of VMs than the ones actually running.
+func TestLimaHomeComesFromTheConfigFileToo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FORGE_HOME", home)
+	t.Setenv("FORGE_LIMA_HOME", "")
+	if got := limaHomeEnv(); got != nil {
+		t.Fatalf("got %v with nothing configured", got)
+	}
+	if err := daemon.SetEnv(home, "FORGE_LIMA_HOME", home+"/lima"); err != nil {
+		t.Fatal(err)
+	}
+	got := limaHomeEnv()
+	if len(got) != 1 || got[0] != "LIMA_HOME="+home+"/lima" {
+		t.Fatalf("got %v, want the value from the env file", got)
+	}
+	t.Setenv("FORGE_LIMA_HOME", "/tmp/override")
+	if got := limaHomeEnv(); got[0] != "LIMA_HOME=/tmp/override" {
+		t.Fatalf("got %v, want the environment to win", got)
+	}
+}

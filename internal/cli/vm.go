@@ -138,8 +138,12 @@ func appendSeparator(rest []string) []string {
 	return append([]string{"--"}, rest...)
 }
 
+// Where the VMs live is a setting, not just an environment variable: a daemon
+// started by launchd reads it from $FORGE_HOME/env, and a CLI that only looked
+// at the environment would list a different machine's worth of VMs than the one
+// actually running them.
 func limaHomeEnv() []string {
-	if v := os.Getenv("FORGE_LIMA_HOME"); v != "" {
+	if v := daemonConfig().LimaHome; v != "" {
 		return []string{"LIMA_HOME=" + v}
 	}
 	return nil

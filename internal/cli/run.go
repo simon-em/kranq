@@ -133,7 +133,8 @@ func runRun(env Env, args []string) int {
 		return exitcode.CouldNotStart
 	}
 
-	driver := vm.Lima{Home: os.Getenv("FORGE_LIMA_HOME")}
+	daemonCfg := daemonConfig()
+	driver := vm.Lima{Bin: limactlPath(daemonCfg.Home), Home: daemonCfg.LimaHome}
 	engine := &run.Engine{
 		Driver: driver,
 		Images: &image.Manager{Driver: driver, Template: assets.LimaTemplate},
