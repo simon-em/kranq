@@ -24,34 +24,38 @@ import (
 
 func daemonConfig() daemon.Config {
 	home := forgeHome()
+	get := settings(home)
 	return daemon.Config{
 		Home:           home,
 		Version:        Version,
-		MaxVMs:         envInt("FORGE_MAX_VMS", 2),
-		MemoryHeadroom: int64(envInt("FORGE_MEMORY_HEADROOM_MB", 2048)) << 20,
-		ClaudeToken:    claudeToken(home),
-		GitRemote:      envOr("FORGE_GIT_REMOTE"),
-		LimaHome:       os.Getenv("FORGE_LIMA_HOME"),
-		HTTPAddr:       os.Getenv("FORGE_HTTP_ADDR"),
+		MaxVMs:         settingInt(get, "FORGE_MAX_VMS", 2),
+		MemoryHeadroom: int64(settingInt(get, "FORGE_MEMORY_HEADROOM_MB", 2048)) << 20,
+		ClaudeToken:    get("CLAUDE_CODE_OAUTH_TOKEN"),
+		GitRemote:      get("FORGE_GIT_REMOTE"),
+		LimaHome:       get("FORGE_LIMA_HOME"),
+		HTTPAddr:       get("FORGE_HTTP_ADDR"),
 	}
 }
 
-func claudeToken(home string) string {
-	if v := os.Getenv("CLAUDE_CODE_OAUTH_TOKEN"); v != "" {
-		return v
-	}
+// A daemon started over ssh, or by launchd, has almost no environment, so every
+// setting falls back to $FORGE_HOME/env. The environment still wins, which is
+// what makes a one-off override work without editing the file.
+func settings(home string) func(string) string {
 	stored, err := daemon.LoadEnv(home)
 	if err != nil {
-		return ""
+		stored = map[string]string{}
 	}
-	return stored["CLAUDE_CODE_OAUTH_TOKEN"]
+	return func(name string) string {
+		if v := os.Getenv(name); v != "" {
+			return v
+		}
+		return stored[name]
+	}
 }
 
-func envInt(name string, fallback int) int {
-	if v := os.Getenv(name); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			return n
-		}
+func settingInt(get func(string) string, name string, fallback int) int {
+	if n, err := strconv.Atoi(get(name)); err == nil {
+		return n
 	}
 	return fallback
 }
@@ -175,7 +179,8 @@ func daemonStop(env Env, args []string) int {
 	}
 	if n := daemon.InFlight(status); n > 0 && !*force {
 		fmt.Fprintf(env.Stderr, "forge: %d task(s) in flight (%s)\n", n, daemon.Describe(status))
-		fmt.Fprintln(env.Stderr, "cancel them, wait, or pass --force to stop anyway")
+		fmt.Fprintln(env.Stderr, "--force stops the daemon anyway; the jobs keep running "+
+			"and are re-adopted when it starts again")
 		return exitcode.Misconfigured
 	}
 	pid, err := readPID(cfg.LockPath())
@@ -187,15 +192,27 @@ func daemonStop(env Env, args []string) int {
 		fmt.Fprintf(env.Stderr, "forge: could not signal pid %d: %v\n", pid, err)
 		return exitcode.InternalError
 	}
-	for range 200 {
-		if client.Ping(context.Background()) != nil {
-			fmt.Fprintln(env.Stderr, "daemon stopped")
-			return exitcode.OK
+	// Waiting for the socket to close is not enough: it stops answering as soon
+	// as the listener returns, while the process is still shutting down and
+	// still holding the lock. Anything that starts a new daemon straight after,
+	// which is what an upgrade does, would then fail to acquire it.
+	if !waitForExit(pid, 10*time.Second) {
+		fmt.Fprintf(env.Stderr, "forge: pid %d has not exited yet\n", pid)
+		return exitcode.InternalError
+	}
+	fmt.Fprintln(env.Stderr, "daemon stopped")
+	return exitcode.OK
+}
+
+func waitForExit(pid int, within time.Duration) bool {
+	deadline := time.Now().Add(within)
+	for time.Now().Before(deadline) {
+		if syscall.Kill(pid, 0) != nil {
+			return true
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	fmt.Fprintln(env.Stderr, "forge: the daemon is still draining in-flight work")
-	return exitcode.OK
+	return false
 }
 
 func readPID(path string) (int, error) {

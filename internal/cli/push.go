@@ -46,8 +46,13 @@ func runPush(env Env, args []string) int {
 	if *tok == "" {
 		*tok = envOr("FORGE_TOKEN")
 	}
-	if *endpoint == "" || *tok == "" {
-		fmt.Fprintln(env.Stderr, "forge: set --endpoint and --token (or FORGE_ENDPOINT and FORGE_TOKEN)")
+	if *endpoint == "" {
+		fmt.Fprintln(env.Stderr, "forge: set --endpoint (or FORGE_ENDPOINT)")
+		return exitcode.Misconfigured
+	}
+	// An ssh endpoint authenticates with a key, so it needs no token at all.
+	if *tok == "" && !isSSH(*endpoint) {
+		fmt.Fprintln(env.Stderr, "forge: set --token (or FORGE_TOKEN), or use an ssh:// endpoint")
 		return exitcode.Misconfigured
 	}
 	if *repo == "" {
@@ -119,8 +124,10 @@ func refusalCode(output string) int {
 	return exitcode.InvalidSpec
 }
 
-// The token is the password, so it goes in the URL rather than an argument that
-// would sit in the process list of whatever else is on this machine.
+// Over http the token is the password, and it goes in the URL rather than an
+// argument that would sit in the process list. Over ssh there is no token at
+// all: the key is the credential, and the path is the repository, because a
+// forced command on the far side is what decides where it lands.
 func pushURL(endpoint, repo, secret string) (string, error) {
 	u, err := url.Parse(strings.TrimSuffix(endpoint, "/"))
 	if err != nil {
@@ -129,6 +136,13 @@ func pushURL(endpoint, repo, secret string) (string, error) {
 	if u.Scheme == "" || u.Host == "" {
 		return "", fmt.Errorf("%q needs a scheme and a host, like https://ci.example.com", endpoint)
 	}
+	if u.Scheme == "ssh" {
+		u.Path = "/" + repo + ".git"
+		return u.String(), nil
+	}
+	if secret == "" {
+		return "", fmt.Errorf("an %s endpoint needs a token", u.Scheme)
+	}
 	u.User = url.UserPassword("forge", secret)
 	if !strings.HasSuffix(u.Path, "/git") {
 		u.Path = strings.TrimSuffix(u.Path, "/") + "/git"
@@ -136,3 +150,5 @@ func pushURL(endpoint, repo, secret string) (string, error) {
 	u.Path += "/" + repo + ".git"
 	return u.String(), nil
 }
+
+func isSSH(endpoint string) bool { return strings.HasPrefix(endpoint, "ssh://") }

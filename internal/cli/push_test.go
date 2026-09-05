@@ -97,3 +97,30 @@ func TestRefusalCodeTellsAuthFromEverythingElse(t *testing.T) {
 		}
 	}
 }
+
+// Over ssh the key is the credential, so there is no token to place anywhere,
+// and the path is the repository because a forced command decides where it goes.
+func TestPushURLOverSSH(t *testing.T) {
+	got, err := pushURL("ssh://macmini@142.127.69.2:333", "dx", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "ssh://macmini@142.127.69.2:333/dx.git" {
+		t.Fatalf("got %q", got)
+	}
+	// A token must not be smuggled into an ssh url, where it would sit in the
+	// process list for no benefit.
+	with, err := pushURL("ssh://macmini@host:333", "dx", "forge_s3cr3t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(with, "s3cr3t") {
+		t.Fatalf("the token ended up in an ssh url: %q", with)
+	}
+}
+
+func TestAnHTTPEndpointStillNeedsAToken(t *testing.T) {
+	if _, err := pushURL("https://ci.example.com", "dx", ""); err == nil {
+		t.Fatal("an http endpoint was accepted with no token")
+	}
+}

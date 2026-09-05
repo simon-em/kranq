@@ -204,24 +204,90 @@ func TestRunReportsAMissingSpecFileBeforeDoingAnything(t *testing.T) {
 	}
 }
 
-func TestClaudeTokenFallsBackToTheStoredEnvFile(t *testing.T) {
+func TestSettingsFallBackToTheStoredEnvFile(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("FORGE_HOME", home)
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "")
 
-	if got := claudeToken(home); got != "" {
+	if got := settings(home)("CLAUDE_CODE_OAUTH_TOKEN"); got != "" {
 		t.Fatalf("token = %q with nothing configured", got)
 	}
 	if err := daemon.SetEnv(home, "CLAUDE_CODE_OAUTH_TOKEN", "stored-token"); err != nil {
 		t.Fatal(err)
 	}
-	if got := claudeToken(home); got != "stored-token" {
+	if got := settings(home)("CLAUDE_CODE_OAUTH_TOKEN"); got != "stored-token" {
 		t.Errorf("token = %q, want the one from the env file; the daemon is started by launchd "+
 			"with no token in its environment, so this fallback is the only way it gets one", got)
 	}
 
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "from-environment")
-	if got := claudeToken(home); got != "from-environment" {
+	if got := settings(home)("CLAUDE_CODE_OAUTH_TOKEN"); got != "from-environment" {
 		t.Errorf("token = %q, want the environment to win for a one-off override", got)
+	}
+}
+
+// The same fallback has to cover every setting, not just the token: a daemon
+// started over ssh or by launchd has almost no environment at all.
+func TestEverySettingComesFromTheEnvFileToo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FORGE_HOME", home)
+	for _, name := range []string{"FORGE_MAX_VMS", "FORGE_GIT_REMOTE", "FORGE_HTTP_ADDR", "FORGE_LIMA_HOME"} {
+		t.Setenv(name, "")
+	}
+	for _, kv := range [][2]string{
+		{"FORGE_MAX_VMS", "1"},
+		{"FORGE_GIT_REMOTE", "git@bitbucket.org:effetmonstre"},
+		{"FORGE_HTTP_ADDR", "127.0.0.1:8420"},
+		{"FORGE_LIMA_HOME", home + "/lima"},
+	} {
+		if err := daemon.SetEnv(home, kv[0], kv[1]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := daemonConfig()
+	if cfg.MaxVMs != 1 {
+		t.Errorf("MaxVMs = %d, want 1 from the env file", cfg.MaxVMs)
+	}
+	if cfg.GitRemote != "git@bitbucket.org:effetmonstre" {
+		t.Errorf("GitRemote = %q", cfg.GitRemote)
+	}
+	if cfg.HTTPAddr != "127.0.0.1:8420" {
+		t.Errorf("HTTPAddr = %q", cfg.HTTPAddr)
+	}
+	if cfg.LimaHome != home+"/lima" {
+		t.Errorf("LimaHome = %q", cfg.LimaHome)
+	}
+}
+
+// A malformed number must not silently become zero, which would mean no job is
+// ever admitted.
+func TestABadNumberFallsBackToTheDefault(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FORGE_HOME", home)
+	t.Setenv("FORGE_MAX_VMS", "not-a-number")
+	if got := daemonConfig().MaxVMs; got != 2 {
+		t.Errorf("MaxVMs = %d, want the default 2", got)
+	}
+}
+
+// forge config ls prints values, so a secret must never be one of them.
+func TestConfigNeverPrintsASecret(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FORGE_HOME", home)
+	if err := daemon.SetEnv(home, "CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-verysecret"); err != nil {
+		t.Fatal(err)
+	}
+	if err := daemon.SetEnv(home, "FORGE_MAX_VMS", "1"); err != nil {
+		t.Fatal(err)
+	}
+	_, out, errb := invoke(t, "config", "ls")
+	if strings.Contains(out+errb, "verysecret") {
+		t.Fatalf("a secret was printed:\n%s%s", out, errb)
+	}
+	if !strings.Contains(out, "FORGE_MAX_VMS") || !strings.Contains(out, "1") {
+		t.Fatalf("an ordinary setting was not shown:\n%s", out)
+	}
+	if code, out, _ := invoke(t, "config", "get", "CLAUDE_CODE_OAUTH_TOKEN"); code == exitcode.OK || strings.Contains(out, "verysecret") {
+		t.Fatalf("config get printed a secret: %d %q", code, out)
 	}
 }

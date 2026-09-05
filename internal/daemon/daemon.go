@@ -18,8 +18,6 @@ import (
 	"github.com/effetmonstre/forge/internal/svc"
 )
 
-const TeardownGrace = 2 * time.Minute
-
 type Config struct {
 	Home           string
 	Version        string
@@ -108,15 +106,15 @@ func (d *Daemon) Run(ctx context.Context) error {
 	return err
 }
 
-// Jobs that outlast the grace period are left running rather than killed. They
-// are re-adopted when the daemon comes back, which is what makes an upgrade
-// cost nothing to a run already forty minutes in.
+// Shutdown does not wait for running jobs. It used to, back when a restart lost
+// them; now each job is its own process and the daemon that comes back
+// re-adopts it, so waiting would be waiting for something that is deliberately
+// being left alive. Worse, a job's context is no longer tied to the daemon's,
+// so the wait could only ever time out, and the old process would sit on the
+// lock for the whole grace period while the new one failed to start.
 func (d *Daemon) drain() {
-	ctx, cancel := context.WithTimeout(context.Background(), TeardownGrace)
-	defer cancel()
-	d.sched.Wait(ctx)
 	if n := d.sched.RunningCount(); n > 0 {
-		log.Printf("leaving %d job(s) running; they will be re-adopted on the next start", n)
+		log.Printf("leaving %d job(s) running; they are re-adopted on the next start", n)
 	}
 }
 

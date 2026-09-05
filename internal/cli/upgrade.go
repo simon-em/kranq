@@ -69,7 +69,12 @@ func swap(env Env, target string, force bool, apply func(context.Context, string
 		wasRunning = true
 		if n := daemon.InFlight(status); n > 0 && !force {
 			fmt.Fprintf(env.Stderr, "forge: %d task(s) in flight (%s)\n", n, daemon.Describe(status))
-			fmt.Fprintln(env.Stderr, "restarting would lose them. Wait, cancel them, or pass --force")
+			// They are not lost by a restart any more: a job runs in its own
+			// process and the daemon that comes back re-adopts it. --force is
+			// still asked for, because a build machine is not a place to
+			// discover that for the first time.
+			fmt.Fprintln(env.Stderr, "they keep running and the new daemon re-adopts them, "+
+				"but the daemon waits for them to finish first. Wait, cancel them, or pass --force")
 			return exitcode.Misconfigured
 		}
 		if code := daemonStop(env, forceArgs(force)); code != exitcode.OK {

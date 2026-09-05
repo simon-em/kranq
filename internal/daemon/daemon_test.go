@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,13 +18,14 @@ import (
 )
 
 type stubExec struct {
-	code     int
-	err      error
-	hold     chan struct{}
-	started  chan string
-	writeLog string
-	artifact string
-	dir      func(id string) string
+	code        int
+	err         error
+	hold        chan struct{}
+	started     chan string
+	writeLog    string
+	artifact    string
+	dir         func(id string) string
+	releaseOnce sync.Once
 }
 
 func (s *stubExec) Adoptable(state.Task) bool { return false }
@@ -54,6 +56,14 @@ func (s *stubExec) Execute(ctx context.Context, t state.Task, script string, out
 	return s.code, s.err
 }
 
+func (s *stubExec) release() {
+	s.releaseOnce.Do(func() {
+		if s.hold != nil {
+			close(s.hold)
+		}
+	})
+}
+
 func daemonWith(t *testing.T, exec *stubExec) (*ipc.Client, *Daemon, context.CancelFunc) {
 	t.Helper()
 	home := t.TempDir()
@@ -68,11 +78,20 @@ func daemonWith(t *testing.T, exec *stubExec) (*ipc.Client, *Daemon, context.Can
 	done := make(chan error, 1)
 	go func() { done <- d.Run(ctx) }()
 	t.Cleanup(func() {
+		// Shutdown deliberately leaves jobs running, so a stub blocked forever
+		// would still be writing into the temp directory while it is removed.
+		exec.release()
 		cancel()
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
 			t.Error("the daemon did not shut down")
+		}
+		// The daemon no longer waits for jobs, so a released one may still be
+		// finishing its bookkeeping while TempDir removes the directory.
+		deadline := time.Now().Add(5 * time.Second)
+		for d.sched.RunningCount() > 0 && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
 		}
 	})
 
@@ -146,7 +165,7 @@ func TestFollowingLogsEndsWhenTheTaskDoes(t *testing.T) {
 	}()
 
 	time.Sleep(100 * time.Millisecond)
-	close(exec.hold)
+	exec.release()
 
 	select {
 	case log := <-done:
@@ -201,7 +220,7 @@ func TestCancelStopsAJob(t *testing.T) {
 		t.Fatal(err)
 	}
 	await(t, c, task.ID, state.StatusCancelled)
-	close(exec.hold)
+	exec.release()
 }
 
 func TestStatusExplainsTheQueue(t *testing.T) {
@@ -226,7 +245,7 @@ func TestStatusExplainsTheQueue(t *testing.T) {
 	if !s.Claude.Present {
 		t.Error("the token was configured but Present is false")
 	}
-	close(exec.hold)
+	exec.release()
 }
 
 func TestUnknownTaskIs404(t *testing.T) {
@@ -323,4 +342,31 @@ func untar(t *testing.T, data []byte) map[string]string {
 		body, _ := io.ReadAll(tr)
 		out[hdr.Name] = string(body)
 	}
+}
+
+// Shutting down used to wait for running jobs to finish, from when a restart
+// lost them. Now they are deliberately left alive to be re-adopted, and a job's
+// context is no longer tied to the daemon's, so that wait could only ever time
+// out while the old process sat on the lock and the new one failed to start.
+func TestShutdownDoesNotWaitForJobsItIsLeavingAlive(t *testing.T) {
+	exec := &stubExec{hold: make(chan struct{}), started: make(chan string, 1)}
+	_, d, _ := daemonWith(t, exec)
+
+	if _, err := d.Submit(ipc.SubmitRequest{Spec: spec, Repo: "dx", Branch: "main"}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-exec.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the job never started")
+	}
+
+	done := make(chan struct{})
+	go func() { d.drain(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("drain waited for a job that is meant to keep running")
+	}
+	exec.release()
 }
