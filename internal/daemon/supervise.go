@@ -21,6 +21,7 @@ type Supervisor struct {
 	Home    string
 	TaskDir func(id string) string
 	Poll    time.Duration
+	Grace   time.Duration
 
 	RecordPGID   func(taskID string, pgid int)
 	RecordResult func(taskID string, res jobproc.Result)
@@ -96,11 +97,35 @@ func (s *Supervisor) await(ctx context.Context, id string, pgid int, dir string)
 		}
 		select {
 		case <-ctx.Done():
-			_ = jobproc.Terminate(pgid)
+			s.teardown(pgid, id)
 			return -1, ctx.Err()
 		case <-ticker.C:
 		}
 	}
+}
+
+// SIGTERM gives the job a chance to destroy its VM, which is the whole reason
+// not to lead with SIGKILL. But a job that ignores it would keep the VM forever,
+// and a leaked VM permanently costs a slot, so the signal escalates.
+func (s *Supervisor) teardown(pgid int, id string) {
+	if err := jobproc.Terminate(pgid); err != nil {
+		return
+	}
+	deadline := time.Now().Add(s.grace())
+	for time.Now().Before(deadline) {
+		if !jobproc.Alive(pgid, id) {
+			return
+		}
+		time.Sleep(s.poll())
+	}
+	_ = jobproc.Kill(pgid)
+}
+
+func (s *Supervisor) grace() time.Duration {
+	if s.Grace > 0 {
+		return s.Grace
+	}
+	return 30 * time.Second
 }
 
 func (s *Supervisor) report(id string, res jobproc.Result) (int, error) {

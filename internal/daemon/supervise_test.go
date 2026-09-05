@@ -240,3 +240,57 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// A job that ignores SIGTERM would otherwise keep its VM forever, and a leaked
+// VM permanently costs a slot.
+func TestAJobThatIgnoresSIGTERMIsKilled(t *testing.T) {
+	s, _ := supervisor(t, "")
+	s.Grace = 300 * time.Millisecond
+	s.Binary = fakeJob(t, "trap '' TERM\nsleep 30\n")
+	var pgid int
+	s.RecordPGID = func(_ string, p int) { pgid = p }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		_, _ = s.Execute(ctx, job("t-1"), "", devnull(t))
+		close(done)
+	}()
+	waitFor(t, func() bool { return pgid != 0 })
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		_ = jobproc.Kill(pgid)
+		t.Fatal("teardown never gave up on a job ignoring SIGTERM")
+	}
+	waitFor(t, func() bool { return !jobproc.Alive(pgid, "t-1") })
+}
+
+func TestTeardownDoesNotWaitOnAJobThatDiesPromptly(t *testing.T) {
+	s, _ := supervisor(t, "")
+	s.Grace = 30 * time.Second
+	s.Binary = fakeJob(t, "sleep 30\n")
+	var pgid int
+	s.RecordPGID = func(_ string, p int) { pgid = p }
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		_, _ = s.Execute(ctx, job("t-1"), "", devnull(t))
+		close(done)
+	}()
+	waitFor(t, func() bool { return pgid != 0 })
+
+	start := time.Now()
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("teardown hung")
+	}
+	if elapsed := time.Since(start); elapsed > 5*time.Second {
+		t.Fatalf("teardown took %s; it waited out the grace period on a job that had already died", elapsed)
+	}
+}

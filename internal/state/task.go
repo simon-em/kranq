@@ -47,7 +47,6 @@ type Task struct {
 	FenceKind   string            `json:"fence_kind,omitempty"`
 	FenceBranch string            `json:"fence_branch,omitempty"`
 	ExecPGID    int               `json:"exec_pgid,omitempty"`
-	ExecStarted int64             `json:"exec_started,omitempty"`
 	CreatedAt   time.Time         `json:"created_at"`
 	StartedAt   *time.Time        `json:"started_at,omitempty"`
 	FinishedAt  *time.Time        `json:"finished_at,omitempty"`

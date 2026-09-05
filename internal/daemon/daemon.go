@@ -158,7 +158,6 @@ func (d *Daemon) Submit(req ipc.SubmitRequest) (state.Task, error) {
 func (d *Daemon) RecordPGID(taskID string, pgid int) {
 	_, _ = d.store.Update(taskID, func(u *state.Task) {
 		u.ExecPGID = pgid
-		u.ExecStarted = time.Now().Unix()
 	})
 }
 
