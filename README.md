@@ -17,6 +17,7 @@ forge doctor                                     # is this machine able to run j
 **[Every command](docs/commands.md)** · [Writing a task](docs/tasks.md) ·
 [Pushing work to forge](docs/push.md) · [Wiring it into a pipeline](docs/pipelines.md) ·
 [At-most-once effects](docs/fence.md) · [Operating it](docs/operations.md) ·
+[Installing with Homebrew](docs/homebrew.md) ·
 [Where things stand](docs/status.md)
 
 ## Why a VM per job
@@ -74,7 +75,14 @@ usage returns. Rotating the token opens the gate immediately.
 ## Install
 
 ```sh
-curl -fsSL <the binary> -o forge && chmod +x forge
+brew tap effetmonstre/tap git@bitbucket.org:effetmonstre/homebrew-tap.git
+brew install forge
+forge install --deps-only        # forge fetches and verifies its own lima
+```
+
+See [homebrew.md](docs/homebrew.md). Or from a binary you already have:
+
+```sh
 ./forge install --with-daemon
 forge auth claude --stdin < token.txt
 forge doctor

@@ -44,9 +44,10 @@ func runUpgrade(env Env, args []string) int {
 		fmt.Fprintln(env.Stderr, "usage: forge upgrade <path-to-new-forge> [--target PATH] [--force]")
 		return exitcode.Usage
 	}
-	return swap(env, upgradeTarget(*target), *force, func(ctx context.Context, to string) (upgrade.Report, error) {
-		return upgrade.Install(ctx, rest[0], to)
-	})
+	return swap(env, upgradeTarget(*target), *force, "use `brew upgrade forge`",
+		func(ctx context.Context, to string) (upgrade.Report, error) {
+			return upgrade.Install(ctx, rest[0], to)
+		})
 }
 
 func runRollback(env Env, args []string) int {
@@ -57,14 +58,16 @@ func runRollback(env Env, args []string) int {
 	if _, err := parsePermuted(fs, args); err != nil {
 		return exitcode.Usage
 	}
-	return swap(env, upgradeTarget(*target), *force, upgrade.Rollback)
+	return swap(env, upgradeTarget(*target), *force,
+		"install the version you want with your package manager", upgrade.Rollback)
 }
 
-func swap(env Env, target string, force bool, apply func(context.Context, string) (upgrade.Report, error)) int {
+func swap(env Env, target string, force bool, advice string, apply func(context.Context, string) (upgrade.Report, error)) int {
 	ctx := context.Background()
 	if manager, managed := upgrade.Managed(target); managed {
-		fmt.Fprintf(env.Stderr, "forge: %s is managed by %s\n", target, manager)
-		fmt.Fprintf(env.Stderr, "use `%s upgrade forge` instead; replacing it here would be undone\n", manager)
+		fmt.Fprintf(env.Stderr, "forge: %s is managed by %s\n", target, manager.Name)
+		fmt.Fprintf(env.Stderr, "%s\nreplacing it here would be undone by the next %s upgrade\n",
+			advice, manager.Command)
 		return exitcode.Misconfigured
 	}
 	client := ipc.NewClient(daemonConfig().SocketPath())

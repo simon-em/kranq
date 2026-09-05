@@ -259,6 +259,7 @@ Copies the running binary to `~/.local/bin`, adds it to PATH, and fetches Lima.
 | `--prefix DIR` | where the binary goes |
 | `--no-path` | do not touch shell startup files |
 | `--skip-deps` | do not install lima |
+| `--deps-only` | lima and launchd only: leave the binary where a package manager put it |
 | `--client-only` | binary and PATH only: no lima, no launchd |
 | `--with-daemon` | also install and start the launchd job |
 

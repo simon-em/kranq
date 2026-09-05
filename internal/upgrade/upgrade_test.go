@@ -170,8 +170,17 @@ func TestManagedRecognisesAPackageManagersBinary(t *testing.T) {
 		"/home/linuxbrew/.linuxbrew/bin/forge",
 		"/nix/store/abc123-forge/bin/forge",
 	} {
-		if _, managed := Managed(path); !managed {
+		manager, managed := Managed(path)
+		if !managed {
 			t.Fatalf("%q was not recognised as managed", path)
+		}
+		// The manager and the command it answers to are different words, and
+		// printing the wrong one hands somebody a line that does not run.
+		if manager.Name == "homebrew" && manager.Command != "brew" {
+			t.Fatalf("%q would be told to run %q", path, manager.Command)
+		}
+		if manager.Command == "" {
+			t.Fatalf("%q has no command to suggest", path)
 		}
 	}
 	for _, path := range []string{
@@ -180,7 +189,7 @@ func TestManagedRecognisesAPackageManagersBinary(t *testing.T) {
 		"/tmp/forge",
 	} {
 		if manager, managed := Managed(path); managed {
-			t.Fatalf("%q was called %s-managed", path, manager)
+			t.Fatalf("%q was called %s-managed", path, manager.Name)
 		}
 	}
 }

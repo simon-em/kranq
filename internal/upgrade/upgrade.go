@@ -17,23 +17,31 @@ var ErrNoPrevious = errors.New("no previous binary to roll back to")
 
 func Previous(target string) string { return target + ".prev" }
 
+// Manager is a package manager that owns forge's binary, and the command it
+// answers to. The two differ: the manager is called homebrew and the command is
+// brew, and printing the wrong one gives somebody a line that does not run.
+type Manager struct {
+	Name    string
+	Command string
+}
+
 // Managed reports whether a package manager owns this path. Replacing a file
 // under a Cellar leaves brew's own record of it wrong, and the next brew
 // upgrade silently undoes whatever was put there.
-func Managed(target string) (string, bool) {
+func Managed(target string) (Manager, bool) {
 	resolved := target
 	if real, err := filepath.EvalSymlinks(target); err == nil {
 		resolved = real
 	}
 	for _, marker := range []string{"/Cellar/", "/homebrew/", "/linuxbrew/"} {
 		if strings.Contains(resolved, marker) {
-			return "homebrew", true
+			return Manager{Name: "homebrew", Command: "brew"}, true
 		}
 	}
 	if strings.HasPrefix(resolved, "/nix/store/") {
-		return "nix", true
+		return Manager{Name: "nix", Command: "nix"}, true
 	}
-	return "", false
+	return Manager{}, false
 }
 
 type Report struct {
