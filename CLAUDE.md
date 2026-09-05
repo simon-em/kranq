@@ -169,3 +169,34 @@ running, to be re-adopted.
 
 **A re-adopted job keeps the deadline it started against**, measured from
 `StartedAt`, so a restart cannot be used to extend a run indefinitely.
+
+**`net/http` buffers before writing to the wire, and `cgi.Handler` does not
+flush.** A pushed build streamed live over ssh and arrived in clumps over http
+until every write was flushed. This is invisible from reading the code: it was
+found by timing a task that prints a line every three seconds. Any future
+handler that streams needs the same treatment.
+
+**Push options need `receive.advertisePushOptions` on the receiving repo**, and a
+shallow push needs `receive.shallowUpdate`. A CI container starts with a shallow
+clone, so without the second, every real pipeline push is rejected with "shallow
+update not allowed". Both are set by `gitsrv.Store.Ensure`; a repository created
+before those existed keeps the old config, so `forge repo rm` and push again.
+
+**Git quarantines pushed objects during `pre-receive`.** The hook itself can read
+them; no separate process can. That is why validation is in `pre-receive` (which
+can still refuse the push) and the run is in `post-receive` (which cannot).
+
+**A `git push` can never carry the task's exit code.** `post-receive` runs after
+the ref is accepted. The `FORGE-RESULT` line is the contract instead; `forge
+push` exits on it.
+
+**Every setting falls back to `$FORGE_HOME/env`, and the CLI must use the same
+lookup as the daemon.** `forge image ls` once came back empty on a machine that
+was running VMs, because the CLI read `FORGE_LIMA_HOME` from the environment
+while the daemon read it from the file. Anything reading a setting goes through
+`daemonConfig()`.
+
+**Shutdown must not wait for running jobs.** They are deliberately left alive to
+be re-adopted, and their contexts are not tied to the daemon's, so a wait can
+only time out while the old process sits on the lock and the next daemon fails
+to start.

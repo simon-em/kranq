@@ -15,8 +15,9 @@ forge doctor                                     # is this machine able to run j
 ```
 
 **[Every command](docs/commands.md)** · [Writing a task](docs/tasks.md) ·
-[Push instead of clone](docs/push.md) · [At-most-once effects](docs/fence.md) ·
-[Operating it](docs/operations.md) · [Where things stand](docs/status.md)
+[Pushing work to forge](docs/push.md) · [Wiring it into a pipeline](docs/pipelines.md) ·
+[At-most-once effects](docs/fence.md) · [Operating it](docs/operations.md) ·
+[Where things stand](docs/status.md)
 
 ## Why a VM per job
 

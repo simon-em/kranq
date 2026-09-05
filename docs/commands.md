@@ -12,7 +12,7 @@ Commands marked **internal** are run by git or by the daemon, never by hand.
 | [The daemon](#the-daemon) | `daemon` `config` `auth` |
 | [Receiving pushes](#receiving-pushes) | `repo` `token` `key` |
 | [At-most-once effects](#at-most-once-effects) | `fence` |
-| [Installing and updating](#installing-and-updating) | `install` `upgrade` `rollback` `uninstall` `version` |
+| [Installing and updating](#installing-and-updating) | `install` `upgrade` `rollback` `uninstall` `version` `help` |
 | [Other machines](#other-machines) | `peer` |
 | [Internal](#internal) | `exec` `git-hook` `git-receive` |
 
@@ -284,6 +284,11 @@ Remove the binary, the PATH block and the launchd job. `--purge` also deletes
 tasks, artifacts and image metadata.
 
 ### `forge version [--json]`
+
+### `forge help [command]`
+
+The command table, or one command's usage. `forge <command>` with wrong
+arguments prints the same thing.
 
 ---
 
