@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 type Snapshot struct {
@@ -80,4 +81,15 @@ func (s Snapshot) FitsCPU(need, inUse int) bool {
 		return false
 	}
 	return inUse+need <= s.CPUs
+}
+
+// FreeDisk reports the bytes available to an unprivileged user at path, which
+// is what an image build actually gets. It returns 0 when it cannot tell, and
+// every caller must treat 0 as unknown rather than as full.
+func FreeDisk(path string) int64 {
+	var fs syscall.Statfs_t
+	if err := syscall.Statfs(path, &fs); err != nil {
+		return 0
+	}
+	return int64(fs.Bavail) * int64(fs.Bsize)
 }

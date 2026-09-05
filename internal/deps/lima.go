@@ -66,6 +66,12 @@ func (l Lima) Install(out io.Writer) error {
 	}
 	want := limaSHA256[runtime.GOARCH]
 
+	// Created here and not left to MkdirAll's parent creation, which would give
+	// the forge home 0755 and undermine the socket's only access control.
+	if err := os.MkdirAll(filepath.Join(l.Root, "deps"), 0o700); err != nil {
+		return err
+	}
+
 	fmt.Fprintf(out, "downloading %s\n", asset)
 	body, err := l.fetch(l.baseURL() + "/" + asset)
 	if err != nil {

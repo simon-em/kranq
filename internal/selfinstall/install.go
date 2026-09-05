@@ -71,13 +71,27 @@ func sameFile(a, b string) (bool, error) {
 	return os.SameFile(ai, bi), nil
 }
 
+// Compared after resolving symlinks, because on macOS /tmp and /var are links
+// into /private and a string comparison reports a directory as absent from a
+// PATH that plainly contains it.
 func OnPath(prefix string) bool {
+	want := resolve(prefix)
 	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
-		if dir == prefix {
+		if dir != "" && resolve(dir) == want {
 			return true
 		}
 	}
 	return false
+}
+
+func resolve(dir string) string {
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
+	if real, err := filepath.EvalSymlinks(dir); err == nil {
+		return real
+	}
+	return dir
 }
 
 func ProfileFor(shell string) (string, error) {
@@ -147,5 +161,25 @@ func RemoveFromProfile(profile string, out io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(out, "removed the forge block from %s\n", profile)
+	return nil
+}
+
+// The daemon socket is authorized by nothing but file permissions, so the home
+// has to be 0700. It is created that way, but an older install, an umask, or a
+// dependency that made it as a parent directory can leave it wider.
+func EnsureHome(home string) error {
+	info, err := os.Stat(home)
+	if os.IsNotExist(err) {
+		return os.MkdirAll(home, 0o700)
+	}
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", home)
+	}
+	if info.Mode().Perm()&^0o700 != 0 {
+		return os.Chmod(home, 0o700)
+	}
 	return nil
 }

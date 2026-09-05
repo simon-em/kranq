@@ -23,6 +23,7 @@ import (
 	"github.com/effetmonstre/forge/internal/image"
 	"github.com/effetmonstre/forge/internal/ipc"
 	"github.com/effetmonstre/forge/internal/run"
+	"github.com/effetmonstre/forge/internal/selfinstall"
 	"github.com/effetmonstre/forge/internal/vm"
 )
 
@@ -142,7 +143,7 @@ func spawnDaemon() error {
 		return err
 	}
 	logPath := forgeHome() + "/daemon.log"
-	if err := os.MkdirAll(forgeHome(), 0o700); err != nil {
+	if err := selfinstall.EnsureHome(forgeHome()); err != nil {
 		return err
 	}
 	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)

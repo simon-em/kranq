@@ -26,6 +26,10 @@ func runInstall(env Env, args []string) int {
 	}
 
 	home := forgeHome()
+	if err := selfinstall.EnsureHome(home); err != nil {
+		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		return exitcode.InternalError
+	}
 	binary, err := selfinstall.InstallBinary(*prefix, env.Stderr)
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)

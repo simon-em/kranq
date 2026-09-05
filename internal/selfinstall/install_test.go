@@ -121,3 +121,64 @@ func TestInstallingOverItselfIsANoOp(t *testing.T) {
 		t.Error("reinstalling produced a different file")
 	}
 }
+
+func TestEnsureHomeCreatesItPrivate(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "forge")
+	if err := EnsureHome(home); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("a fresh home is %04o, not 0700", info.Mode().Perm())
+	}
+}
+
+func TestEnsureHomeNarrowsAWideOne(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "forge")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureHome(home); err != nil {
+		t.Fatal(err)
+	}
+	info, _ := os.Stat(home)
+	if info.Mode().Perm() != 0o700 {
+		t.Fatalf("a world-readable home was left at %04o", info.Mode().Perm())
+	}
+}
+
+func TestEnsureHomeRefusesAFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "forge")
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureHome(path); err == nil {
+		t.Fatal("a plain file was accepted as the forge home")
+	}
+}
+
+func TestOnPathSeesThroughSymlinks(t *testing.T) {
+	root := t.TempDir()
+	real := filepath.Join(root, "real")
+	if err := os.MkdirAll(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", link+":/usr/bin")
+	if !OnPath(real) {
+		t.Fatal("a directory on PATH through a symlink was reported as absent")
+	}
+	t.Setenv("PATH", real+":/usr/bin")
+	if !OnPath(link) {
+		t.Fatal("a symlink to a directory on PATH was reported as absent")
+	}
+	if OnPath(filepath.Join(root, "elsewhere")) {
+		t.Fatal("an unrelated directory was reported as on PATH")
+	}
+}

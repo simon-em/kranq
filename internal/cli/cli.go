@@ -41,6 +41,7 @@ func init() {
 		"validate":  {"validate <task.yaml>...", "check that a task spec parses and compiles", runValidate},
 		"vm":        {"vm ls|shell|rm", "inspect or remove job VMs", runVM},
 		"fence":     {"fence ls|show|break", "inspect the at-most-once fences held on a repo", runFence},
+		"doctor":    {"doctor [--json]", "check this machine can run tasks", runDoctor},
 		"render":    {"render <task.yaml>", "print the bash script a spec compiles to", runRender},
 		"help":      {"help [command]", "show usage", runHelp},
 	}
