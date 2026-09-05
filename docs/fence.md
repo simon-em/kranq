@@ -58,6 +58,25 @@ path a remote uses. **Not yet confirmed against Bitbucket Cloud**: whether it ac
 writes to a custom `refs/forge/*` namespace is a hosting policy, not a git behaviour.
 Confirm before the first fenced task runs for real.
 
+## Verified end to end
+
+Run against a real Lima VM, with a `git daemon` on the host standing in for the
+git host so nothing external is touched:
+
+| | |
+| --- | --- |
+| host claims before any image work | claimed, then the project layer built |
+| a raw `git push` inside the VM | refused by the guard hook |
+| `forge_push` | fence advanced and branch created in one push |
+| clean finish | fence released, branch present |
+| a second run against a held fence | refused after checkout, no VM, no branch |
+| pushed then failed | fence held, phase `pushed`, holder named |
+| failed having pushed nothing | fence released |
+
+That last row happened by accident: a rerun failed on a non-fast-forward before
+reaching `forge_push`, and the fence was released exactly as intended, so an
+ordinary failure needs no human.
+
 ## Ownership is by content, not by object
 
 The host claims the fence, but the job advances it from **inside the VM**, so the
