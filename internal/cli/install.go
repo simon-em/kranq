@@ -21,6 +21,7 @@ func runInstall(env Env, args []string) int {
 	skipDeps := fs.Bool("skip-deps", false, "do not install lima")
 	clientOnly := fs.Bool("client-only", false, "binary and PATH only: no lima, no launchd")
 	withDaemon := fs.Bool("with-daemon", false, "also install and start the launchd job")
+	depsOnly := fs.Bool("deps-only", false, "lima and launchd only: leave the binary where it is")
 	if _, err := parsePermuted(fs, args); err != nil {
 		return exitcode.Usage
 	}
@@ -30,13 +31,22 @@ func runInstall(env Env, args []string) int {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
 		return exitcode.InternalError
 	}
-	binary, err := selfinstall.InstallBinary(*prefix, env.Stderr)
+	// A package manager owns the binary and PATH when it installed forge, so
+	// copying it somewhere else would leave two copies that upgrade separately.
+	binary, err := os.Executable()
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
 		return exitcode.InternalError
 	}
+	if !*depsOnly {
+		binary, err = selfinstall.InstallBinary(*prefix, env.Stderr)
+		if err != nil {
+			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			return exitcode.InternalError
+		}
+	}
 
-	if !*noPath {
+	if !*noPath && !*depsOnly {
 		shell := os.Getenv("SHELL")
 		profile, err := selfinstall.ProfileFor(shell)
 		if err != nil {

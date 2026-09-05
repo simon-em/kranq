@@ -350,3 +350,24 @@ func TestAutoCreateReposDefaultsOn(t *testing.T) {
 		t.Error("true did not turn it back on")
 	}
 }
+
+// When a package manager installed forge it owns the binary and PATH, and
+// copying it elsewhere would leave two copies that upgrade separately.
+func TestDepsOnlyInstallLeavesTheBinaryAlone(t *testing.T) {
+	home := t.TempDir()
+	prefix := filepath.Join(t.TempDir(), "bin")
+	t.Setenv("FORGE_HOME", home)
+	profile := filepath.Join(t.TempDir(), ".zprofile")
+	t.Setenv("HOME", filepath.Dir(profile))
+
+	code, _, errb := invoke(t, "install", "--deps-only", "--skip-deps", "--prefix", prefix)
+	if code != exitcode.OK {
+		t.Fatalf("code %d: %s", code, errb)
+	}
+	if _, err := os.Stat(filepath.Join(prefix, "forge")); err == nil {
+		t.Fatal("--deps-only copied the binary anyway")
+	}
+	if body, err := os.ReadFile(profile); err == nil && strings.Contains(string(body), "forge") {
+		t.Fatalf("--deps-only edited a shell profile:\n%s", body)
+	}
+}

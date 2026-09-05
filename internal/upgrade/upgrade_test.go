@@ -160,3 +160,52 @@ func TestInstalledBinaryIsExecutable(t *testing.T) {
 		t.Fatalf("the installed binary is %04o", info.Mode().Perm())
 	}
 }
+
+// Replacing a file a package manager owns leaves its record of that file wrong,
+// and the next `brew upgrade` silently undoes whatever was put there.
+func TestManagedRecognisesAPackageManagersBinary(t *testing.T) {
+	for _, path := range []string{
+		"/opt/homebrew/Cellar/forge/1.0.0/bin/forge",
+		"/usr/local/Cellar/forge/1.0.0/bin/forge",
+		"/home/linuxbrew/.linuxbrew/bin/forge",
+		"/nix/store/abc123-forge/bin/forge",
+	} {
+		if _, managed := Managed(path); !managed {
+			t.Fatalf("%q was not recognised as managed", path)
+		}
+	}
+	for _, path := range []string{
+		"/Users/x/.local/bin/forge",
+		"/usr/local/bin/forge",
+		"/tmp/forge",
+	} {
+		if manager, managed := Managed(path); managed {
+			t.Fatalf("%q was called %s-managed", path, manager)
+		}
+	}
+}
+
+// brew puts a symlink in bin pointing into the Cellar, and that symlink is what
+// is on PATH, so the check has to look through it.
+func TestManagedSeesThroughABrewSymlink(t *testing.T) {
+	root := t.TempDir()
+	cellar := filepath.Join(root, "Cellar", "forge", "1.0.0", "bin")
+	if err := os.MkdirAll(cellar, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	real := filepath.Join(cellar, "forge")
+	if err := os.WriteFile(real, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	bin := filepath.Join(root, "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(bin, "forge")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	if _, managed := Managed(link); !managed {
+		t.Fatal("a symlink into a Cellar was not recognised as managed")
+	}
+}

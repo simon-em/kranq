@@ -62,6 +62,11 @@ func runRollback(env Env, args []string) int {
 
 func swap(env Env, target string, force bool, apply func(context.Context, string) (upgrade.Report, error)) int {
 	ctx := context.Background()
+	if manager, managed := upgrade.Managed(target); managed {
+		fmt.Fprintf(env.Stderr, "forge: %s is managed by %s\n", target, manager)
+		fmt.Fprintf(env.Stderr, "use `%s upgrade forge` instead; replacing it here would be undone\n", manager)
+		return exitcode.Misconfigured
+	}
 	client := ipc.NewClient(daemonConfig().SocketPath())
 
 	wasRunning := false

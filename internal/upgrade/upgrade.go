@@ -9,12 +9,32 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 var ErrNoPrevious = errors.New("no previous binary to roll back to")
 
 func Previous(target string) string { return target + ".prev" }
+
+// Managed reports whether a package manager owns this path. Replacing a file
+// under a Cellar leaves brew's own record of it wrong, and the next brew
+// upgrade silently undoes whatever was put there.
+func Managed(target string) (string, bool) {
+	resolved := target
+	if real, err := filepath.EvalSymlinks(target); err == nil {
+		resolved = real
+	}
+	for _, marker := range []string{"/Cellar/", "/homebrew/", "/linuxbrew/"} {
+		if strings.Contains(resolved, marker) {
+			return "homebrew", true
+		}
+	}
+	if strings.HasPrefix(resolved, "/nix/store/") {
+		return "nix", true
+	}
+	return "", false
+}
 
 type Report struct {
 	Target   string
