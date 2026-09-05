@@ -417,3 +417,68 @@ func TestABodyPastTheCapNeverReachesTheBackend(t *testing.T) {
 		}
 	}
 }
+
+// A push runs the task with the connection open, and the point of that is
+// watching the build happen. Without flushing each write, net/http holds a
+// couple of kilobytes back and the output arrives in clumps.
+func TestOutputIsFlushedAsItIsWritten(t *testing.T) {
+	h := newHarness(t)
+	slow := filepath.Join(t.TempDir(), "slow.cgi")
+	body := "#!/bin/sh\nprintf 'Content-Type: text/plain\\n\\n'\n" +
+		"for i in 1 2 3; do printf 'tick %s\\n' \"$i\"; sleep 0.4; done\n"
+	if err := os.WriteFile(slow, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	set := &token.Set{}
+	secret, _ := set.Create("ci-dx", time.Now())
+	srv := httptest.NewServer((&Server{
+		Store: h.store, Backend: slow,
+		Tokens: func() (*token.Set, error) { return set, nil },
+	}).Handler())
+	defer srv.Close()
+
+	req, err := http.NewRequest("GET", srv.URL+"/dx.git/info/refs", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.SetBasicAuth("forge", secret)
+	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	start := time.Now()
+	var gaps []time.Duration
+	buf := make([]byte, 64)
+	for len(gaps) < 3 {
+		n, err := resp.Body.Read(buf)
+		if n > 0 {
+			gaps = append(gaps, time.Since(start))
+		}
+		if err != nil {
+			break
+		}
+	}
+	if len(gaps) < 3 {
+		t.Fatalf("only %d chunk(s) arrived separately; the output was buffered into one", len(gaps))
+	}
+	// The last line cannot have arrived at the same moment as the first.
+	if gaps[len(gaps)-1]-gaps[0] < 300*time.Millisecond {
+		t.Fatalf("all output arrived within %s; it is not being flushed as written",
+			gaps[len(gaps)-1]-gaps[0])
+	}
+}
+
+func TestStreamingIsANoOpWhenThereIsNothingToFlush(t *testing.T) {
+	plain := notAFlusher{}
+	if got := streaming(plain); got != http.ResponseWriter(plain) {
+		t.Fatal("a writer that cannot flush was wrapped anyway")
+	}
+}
+
+type notAFlusher struct{}
+
+func (notAFlusher) Header() http.Header       { return http.Header{} }
+func (notAFlusher) Write([]byte) (int, error) { return 0, nil }
+func (notAFlusher) WriteHeader(int)           {}

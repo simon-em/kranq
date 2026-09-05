@@ -97,8 +97,34 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			"FORGE_TOKEN_NAME=" + name,
 		},
 		InheritEnv: []string{"PATH", "HOME"},
-	}).ServeHTTP(w, proxied)
+	}).ServeHTTP(streaming(w), proxied)
 }
+
+// A push runs the task while the connection is open, and the point of that is
+// watching the build as it happens. net/http buffers a couple of kilobytes
+// before putting anything on the wire, so without flushing every write the
+// output arrives in blocks minutes apart instead of line by line. Measured: six
+// lines three seconds apart came back as two clumps.
+func streaming(w http.ResponseWriter) http.ResponseWriter {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return w
+	}
+	return flushingWriter{ResponseWriter: w, flusher: flusher}
+}
+
+type flushingWriter struct {
+	http.ResponseWriter
+	flusher http.Flusher
+}
+
+func (w flushingWriter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	w.flusher.Flush()
+	return n, err
+}
+
+func (w flushingWriter) Flush() { w.flusher.Flush() }
 
 // "/dx.git/info/refs" becomes "/info/refs". A leftover empty segment makes git
 // report the path as "aliased" and refuse to serve it.
