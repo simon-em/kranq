@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/effetmonstre/forge/assets"
 	"github.com/effetmonstre/forge/internal/exitcode"
+	"github.com/effetmonstre/forge/internal/fence"
 	"github.com/effetmonstre/forge/internal/image"
 	"github.com/effetmonstre/forge/internal/ipc"
 	"github.com/effetmonstre/forge/internal/run"
@@ -147,6 +149,7 @@ func runRun(env Env, args []string) int {
 		ArtifactDir: *artifacts,
 		RemoteBase:  *remote,
 		Keep:        keepPolicy,
+		Fence:       localFence(spec, *branch, *repo),
 	}, env.Stderr)
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
@@ -157,6 +160,17 @@ func runRun(env Env, args []string) int {
 	}
 	fmt.Fprintf(env.Stderr, "task exited %d\n", res.ExitCode)
 	return exitcode.FromTask(res.ExitCode)
+}
+
+func localFence(spec task.Spec, branch, repo string) *run.FencePlan {
+	if !spec.Fenced() {
+		return nil
+	}
+	return &run.FencePlan{
+		Dir:   filepath.Join(forgeHome(), "fence"),
+		Node:  nodeName(),
+		Scope: fence.Scope{Kind: spec.FenceKind(), Repo: repo, Branch: spec.FenceBranch(branch)},
+	}
 }
 
 func envOr(names ...string) string {

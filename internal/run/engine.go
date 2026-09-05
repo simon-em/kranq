@@ -59,6 +59,7 @@ type Request struct {
 	ArtifactDir string
 	RemoteBase  string
 	Keep        KeepPolicy
+	Fence       *FencePlan
 }
 
 type Result struct {
@@ -67,6 +68,8 @@ type Result struct {
 	Image     string
 	Artifacts bool
 	Kept      bool
+	FenceRef  string
+	FenceHeld bool
 }
 
 type Engine struct {
@@ -81,6 +84,15 @@ func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res R
 	if err != nil {
 		return res, err
 	}
+
+	// Claimed before the image work rather than at first push, so a collision
+	// costs seconds instead of surfacing forty minutes into a run.
+	remote := Remote{Base: req.RemoteBase, Repo: req.Repo, Token: ResolveToken(req.Env)}
+	held, err := e.claimFence(ctx, req, remote, out)
+	if err != nil {
+		return res, err
+	}
+	defer func() { e.settleFence(context.WithoutCancel(ctx), held, &res, out) }()
 
 	plan, err := e.Images.Ensure(ctx, req.Repo, req.Ref, proj, out)
 	if err != nil {
@@ -115,12 +127,11 @@ func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res R
 		return res, err
 	}
 
-	remote := Remote{Base: req.RemoteBase, Repo: req.Repo, Token: ResolveToken(req.Env)}
 	work := `"$HOME/` + WorkDir + `"`
 	script := fmt.Sprintf("set -euo pipefail\nrm -rf %s\n%s\ncd %s\nexec bash /tmp/forge-task.sh\n",
 		work, remote.CloneCommand(req.Ref, work), work)
 
-	code, err := e.Driver.Shell(ctx, name, e.exports(req)+script, out)
+	code, err := e.Driver.Shell(ctx, name, e.exports(req, held)+script, out)
 	if err != nil {
 		return res, err
 	}
@@ -130,15 +141,24 @@ func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res R
 	return res, nil
 }
 
-func (e *Engine) exports(req Request) string {
-	keys := make([]string, 0, len(req.Env))
-	for k := range req.Env {
+func (e *Engine) exports(req Request, held *heldFence) string {
+	env := map[string]string{}
+	for k, v := range req.Env {
+		env[k] = v
+	}
+	if held != nil {
+		for k, v := range held.env(req.TaskID) {
+			env[k] = v
+		}
+	}
+	keys := make([]string, 0, len(env))
+	for k := range env {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	var b []byte
 	for _, k := range keys {
-		b = append(b, fmt.Sprintf("export %s=%s\n", k, shellQuote(req.Env[k]))...)
+		b = append(b, fmt.Sprintf("export %s=%s\n", k, shellQuote(env[k]))...)
 	}
 	if token := ResolveToken(req.Env); token != "" {
 		b = append(b, fmt.Sprintf("export FORGE_GIT_TOKEN=%s\n", shellQuote(token))...)

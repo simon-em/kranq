@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/effetmonstre/forge/internal/fence"
 	"github.com/effetmonstre/forge/internal/run"
 	"github.com/effetmonstre/forge/internal/sshagent"
 	"github.com/effetmonstre/forge/internal/state"
@@ -15,7 +16,22 @@ type Runner struct {
 	RemoteBase   string
 	ArtifactsDir func(id string) string
 	AgentRoot    string
+	FenceDir     string
+	Node         string
 	Record       func(taskID, vmName string, kept bool)
+}
+
+func (r *Runner) fence(t state.Task) *run.FencePlan {
+	if t.FenceKind == "" || r.FenceDir == "" {
+		return nil
+	}
+	return &run.FencePlan{
+		Dir:  r.FenceDir,
+		Node: r.Node,
+		Scope: fence.Scope{
+			Kind: t.FenceKind, Repo: t.Repo, Branch: t.FenceBranch,
+		},
+	}
 }
 
 func (r *Runner) Execute(ctx context.Context, t state.Task, script string, out *os.File) (int, error) {
@@ -52,6 +68,7 @@ func (r *Runner) Execute(ctx context.Context, t state.Task, script string, out *
 		ArtifactDir: r.ArtifactsDir(t.ID),
 		RemoteBase:  r.RemoteBase,
 		Keep:        keep,
+		Fence:       r.fence(t),
 	}, out)
 	if r.Record != nil {
 		r.Record(t.ID, res.VMName, res.Kept)

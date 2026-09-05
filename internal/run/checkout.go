@@ -29,6 +29,16 @@ func splitSSHBase(base string) (host, workspace string) {
 	return host, workspace
 }
 
+// URL is the address the host itself uses, which is https whenever a token was
+// forwarded and ssh otherwise. It has to agree with CloneCommand, or the fence
+// and the checkout would authenticate as different principals.
+func (r Remote) URL() string {
+	if r.Token == "" {
+		return r.sshURL()
+	}
+	return r.httpsURL()
+}
+
 func (r Remote) CloneCommand(ref, dest string) string {
 	if r.Token == "" {
 		return fmt.Sprintf("git clone --depth 1 --branch %s %s %s",

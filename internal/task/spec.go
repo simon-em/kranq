@@ -36,6 +36,12 @@ type Step struct {
 	ContinueOn      bool                 `yaml:"continue_on_error"`
 }
 
+type Effects struct {
+	Push  bool   `yaml:"push"`
+	Key   string `yaml:"key"`
+	Scope string `yaml:"scope"`
+}
+
 type Spec struct {
 	Name      string            `yaml:"name"`
 	Repo      string            `yaml:"repo"`
@@ -44,6 +50,7 @@ type Spec struct {
 	Artifacts string            `yaml:"artifacts"`
 	Resources Resources         `yaml:"resources"`
 	Env       map[string]string `yaml:"env"`
+	Effects   Effects           `yaml:"effects"`
 	Steps     []Step            `yaml:"steps"`
 }
 
@@ -108,7 +115,39 @@ func (s Spec) validate() error {
 			return err
 		}
 	}
+	return s.Effects.validate()
+}
+
+var validEffectScopes = map[string]bool{"": true, "branch": true, "repo": true}
+
+func (e Effects) validate() error {
+	if !validEffectScopes[e.Scope] {
+		return fmt.Errorf("effects.scope must be branch or repo, not %q", e.Scope)
+	}
+	if !e.Push && (e.Key != "" || e.Scope != "") {
+		return errors.New("effects.key and effects.scope only apply when effects.push is true")
+	}
 	return nil
+}
+
+func (s Spec) Fenced() bool { return s.Effects.Push }
+
+// FenceKind is the first component of the fence identity. Two tasks sharing a
+// kind, a repo and a scope contend for the same fence.
+func (s Spec) FenceKind() string {
+	if s.Effects.Key != "" {
+		return s.Effects.Key
+	}
+	return s.Name
+}
+
+// FenceBranch is empty when the effect is repo-wide, which makes every branch
+// of that repo contend for one fence.
+func (s Spec) FenceBranch(branch string) string {
+	if s.Effects.Scope == "repo" {
+		return ""
+	}
+	return branch
 }
 
 func (s Spec) NeedsClaude() bool {

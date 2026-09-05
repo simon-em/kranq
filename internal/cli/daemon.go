@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
@@ -69,7 +70,10 @@ func newDaemon() (*daemon.Daemon, error) {
 		Images: &image.Manager{Driver: driver, Template: assets.LimaTemplate},
 		Assets: assets.MCP(),
 	}
-	runner := &daemon.Runner{Engine: engine, RemoteBase: cfg.GitRemote, AgentRoot: cfg.Home}
+	runner := &daemon.Runner{
+		Engine: engine, RemoteBase: cfg.GitRemote, AgentRoot: cfg.Home,
+		FenceDir: filepath.Join(cfg.Home, "fence"), Node: nodeName(),
+	}
 	d, err := daemon.New(cfg, runner)
 	if err != nil {
 		return nil, err
@@ -287,4 +291,17 @@ func limactlPath(home string) string {
 		return lima.Binary()
 	}
 	return ""
+}
+
+// nodeName only ever appears in a fence record, so a machine that cannot name
+// itself is a cosmetic problem rather than a fatal one.
+func nodeName() string {
+	if v := os.Getenv("FORGE_NODE"); v != "" {
+		return v
+	}
+	host, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return host
 }

@@ -42,6 +42,8 @@ type Task struct {
 	VMName      string            `json:"vm_name,omitempty"`
 	VMKept      bool              `json:"vm_kept,omitempty"`
 	Keep        string            `json:"keep,omitempty"`
+	FenceKind   string            `json:"fence_kind,omitempty"`
+	FenceBranch string            `json:"fence_branch,omitempty"`
 	ExecPGID    int               `json:"exec_pgid,omitempty"`
 	ExecStarted int64             `json:"exec_started,omitempty"`
 	CreatedAt   time.Time         `json:"created_at"`

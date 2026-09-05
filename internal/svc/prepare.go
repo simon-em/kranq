@@ -78,8 +78,18 @@ func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (st
 		SpecYAML:    string(req.SpecYAML),
 		Env:         req.Env,
 		Keep:        req.Keep,
+		FenceKind:   fenceKind(spec),
+		FenceBranch: spec.FenceBranch(branch),
 		CreatedAt:   now,
 	}, nil
+}
+
+// An empty kind means the task declared no effects and runs unfenced.
+func fenceKind(spec task.Spec) string {
+	if !spec.Fenced() {
+		return ""
+	}
+	return spec.FenceKind()
 }
 
 func firstNonEmpty(values ...string) string {

@@ -40,6 +40,7 @@ func init() {
 		"version":   {"version [--json]", "print the forge version", runVersion},
 		"validate":  {"validate <task.yaml>...", "check that a task spec parses and compiles", runValidate},
 		"vm":        {"vm ls|shell|rm", "inspect or remove job VMs", runVM},
+		"fence":     {"fence ls|show|break", "inspect the at-most-once fences held on a repo", runFence},
 		"render":    {"render <task.yaml>", "print the bash script a spec compiles to", runRender},
 		"help":      {"help [command]", "show usage", runHelp},
 	}

@@ -23,6 +23,19 @@ Measured on a 16 GiB M-series Mac with Lima 2.2.0:
 The 17s figure is the one that matters: `limactl clone` is an APFS copy-on-write clone, so a
 warm image costs almost nothing to start from.
 
+**Phase 3: install, VM inspection, and the fence.** `forge install` fetches and
+verifies its own Lima and writes the launchd job; `forge auth claude` stores the token
+in `$FORGE_HOME/env` at 0600. `--keep-vm` plus `forge vm ls|shell|rm` open a failed
+run for inspection. The env-derived checkout credential is in `run.Remote`, so a
+forwarded `BITBUCKET_TOKEN` produces an https clone and no forwarded agent is needed.
+
+The fence landed with `spec.effects`, `internal/fence`, the in-VM `forge_push` helper
+and its guard hook, and `forge fence ls|show|break`. Two of the plan's assumptions
+about git were wrong and are recorded in [fence.md](fence.md).
+
+Still open in phase 3: `forge upgrade|rollback|doctor|deps`, and `forge peer upgrade`
+replacing `deploy.sh`.
+
 ## Phase 2, in progress
 
 Done so far: `internal/state`, `internal/gate`, `internal/svc.Prepare`, `internal/hostres`,

@@ -133,6 +133,9 @@ sys.stdout.write(json.dumps(spec))' "$1"
 func BuildScript(s Spec, env map[string]string) string {
 	var b strings.Builder
 	b.WriteString(scriptPreamble)
+	if s.Fenced() {
+		b.WriteString(fencePreamble)
+	}
 
 	merged := map[string]string{}
 	for k, v := range s.Env {
