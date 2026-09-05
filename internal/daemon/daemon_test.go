@@ -26,6 +26,12 @@ type stubExec struct {
 	dir      func(id string) string
 }
 
+func (s *stubExec) Adoptable(state.Task) bool { return false }
+
+func (s *stubExec) Adopt(ctx context.Context, t state.Task) (int, error) {
+	return -1, context.Canceled
+}
+
 func (s *stubExec) Execute(ctx context.Context, t state.Task, script string, out *os.File) (int, error) {
 	if s.writeLog != "" {
 		_, _ = out.WriteString(s.writeLog)

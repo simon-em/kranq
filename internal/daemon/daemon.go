@@ -3,6 +3,7 @@ package daemon
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/effetmonstre/forge/internal/gate"
 	"github.com/effetmonstre/forge/internal/hostres"
 	"github.com/effetmonstre/forge/internal/ipc"
+	"github.com/effetmonstre/forge/internal/jobproc"
 	"github.com/effetmonstre/forge/internal/sched"
 	"github.com/effetmonstre/forge/internal/sockpath"
 	"github.com/effetmonstre/forge/internal/state"
@@ -104,10 +106,16 @@ func (d *Daemon) Run(ctx context.Context) error {
 	return err
 }
 
+// Jobs that outlast the grace period are left running rather than killed. They
+// are re-adopted when the daemon comes back, which is what makes an upgrade
+// cost nothing to a run already forty minutes in.
 func (d *Daemon) drain() {
 	ctx, cancel := context.WithTimeout(context.Background(), TeardownGrace)
 	defer cancel()
 	d.sched.Wait(ctx)
+	if n := d.sched.RunningCount(); n > 0 {
+		log.Printf("leaving %d job(s) running; they will be re-adopted on the next start", n)
+	}
 }
 
 func (d *Daemon) prune(ctx context.Context) {
@@ -147,10 +155,21 @@ func (d *Daemon) Submit(req ipc.SubmitRequest) (state.Task, error) {
 	return t, nil
 }
 
-func (d *Daemon) RecordVM(taskID, vmName string, kept bool) {
+func (d *Daemon) RecordPGID(taskID string, pgid int) {
 	_, _ = d.store.Update(taskID, func(u *state.Task) {
-		u.VMName = vmName
-		u.VMKept = kept
+		u.ExecPGID = pgid
+		u.ExecStarted = time.Now().Unix()
+	})
+}
+
+// Everything the daemon learns about the run itself comes from here, because
+// the run happened in another process.
+func (d *Daemon) RecordResult(taskID string, res jobproc.Result) {
+	_, _ = d.store.Update(taskID, func(u *state.Task) {
+		u.VMName = res.VMName
+		u.VMKept = res.Kept
+		u.FenceRef = res.FenceRef
+		u.FenceHeld = res.FenceHeld
 	})
 }
 
@@ -158,6 +177,7 @@ func (d *Daemon) List() []state.Task                { return d.store.List() }
 func (d *Daemon) Get(id string) (state.Task, error) { return d.store.Get(id) }
 func (d *Daemon) Cancel(id string) error            { return d.sched.Cancel(id) }
 func (d *Daemon) LogPath(id string) string          { return d.store.LogPath(id) }
+func (d *Daemon) TaskDir(id string) string          { return d.store.Dir(id) }
 func (d *Daemon) ArtifactsDir(id string) string     { return d.store.ArtifactsDir(id) }
 
 func (d *Daemon) Status() ipc.Status {

@@ -51,7 +51,12 @@ and `forge daemon run|start|stop|status` exist. The daemon autostarts on first u
 Validated on this Mac end to end: autostart, submit, queue, follow, artifacts back over the
 socket, correct exit code, 20s against a warm image.
 
-Still to do in phase 2: re-adoption of in-flight jobs across a daemon restart.
+Re-adoption is done. Each job runs as `forge exec <id>` in its own process group
+and records its outcome in `result.json`, so a daemon SIGKILL no longer costs the
+run. Verified on real hardware: the daemon was killed mid-job, the job kept going
+and its VM stayed up, the restarted daemon re-adopted it as attempt 1 and reported
+the real exit code. A job that finished while no daemon was running at all was
+picked up from its record on the next start instead of being marked lost.
 
 Re-adoption is deliberately last of those. Marking a restarted task `lost` is already correct
 and safe; re-adoption only makes it *cheaper*, by not throwing away a 45-minute run. It needs

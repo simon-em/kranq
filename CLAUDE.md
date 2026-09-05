@@ -151,3 +151,21 @@ inside the VM. Ownership is read back out of the record's JSON (`fence.Adopt`).
 **Writes to `refs/forge/*` are unconfirmed against Bitbucket Cloud.** Everything in
 the fence was probed against a local bare repo. Whether the host allows a custom ref
 namespace is hosting policy; confirm before the first fenced task runs for real.
+
+**A job runs in its own process, not in the daemon.** The daemon starts
+`forge exec <id>` with `Setpgid`, and everything it learns about the run comes
+from `result.json` in the task directory. That is what lets a job outlive a
+daemon SIGKILL and a restarted daemon pick the outcome back up. `forge exec` is
+listed in the command table on purpose: re-adoption identifies a job by finding
+`exec` and the task id in its `ps` command line, because a pid alone is not an
+identity.
+
+**A job's deadline is its own, not the daemon's.** The per-task context comes
+from `context.Background()`, so shutting the daemon down does not cancel work in
+flight; only a cancel or the task's own timeout does. Deriving it from the
+daemon context would make every restart kill the runs it is supposed to preserve.
+On shutdown the daemon waits `TeardownGrace` and then leaves whatever is left
+running, to be re-adopted.
+
+**A re-adopted job keeps the deadline it started against**, measured from
+`StartedAt`, so a restart cannot be used to extend a run indefinitely.

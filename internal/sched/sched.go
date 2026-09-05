@@ -15,6 +15,11 @@ import (
 
 type Executor interface {
 	Execute(ctx context.Context, t state.Task, script string, out *os.File) (exitCode int, err error)
+	// Adoptable reports whether a task found running at startup still has a
+	// job behind it, either still going or finished and waiting to be read.
+	Adoptable(t state.Task) bool
+	// Adopt waits on that job as Execute would, without starting a new one.
+	Adopt(ctx context.Context, t state.Task) (exitCode int, err error)
 }
 
 type Config struct {
@@ -60,7 +65,7 @@ func (s *Scheduler) Wake() {
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
-	s.Recover()
+	s.Recover(ctx)
 	go func() {
 		ticker := time.NewTicker(s.cfg.PollInterval)
 		defer ticker.Stop()
@@ -76,13 +81,47 @@ func (s *Scheduler) Start(ctx context.Context) {
 	}()
 }
 
-func (s *Scheduler) Recover() {
+// A task found running at startup is re-adopted when its job survived, and lost
+// otherwise. There is deliberately no path from running back to queued: the job
+// may have pushed a branch and opened a pull request already, so re-running it
+// is a human decision under a new task id, never something that happens on a
+// restart.
+func (s *Scheduler) Recover(ctx context.Context) {
 	for _, t := range s.store.List() {
 		if t.Status != state.StatusRunning {
 			continue
 		}
-		s.markLost(t.ID, "the daemon restarted while this task was running, and its executor is gone")
+		if !s.exec.Adoptable(t) {
+			s.markLost(t.ID, "the daemon restarted while this task was running, and its job is gone")
+			continue
+		}
+		s.readopt(ctx, t)
 	}
+}
+
+func (s *Scheduler) readopt(_ context.Context, t state.Task) {
+	runCtx, cancel := context.WithTimeout(context.Background(), s.remaining(t))
+	s.mu.Lock()
+	s.running[t.ID] = cancel
+	s.mu.Unlock()
+	go func() {
+		defer s.finish(t.ID, cancel)
+		s.readoptRun(runCtx, t)
+		s.Wake()
+	}()
+}
+
+// The timeout is measured from when the job actually started, not from now, so
+// a restart does not hand a long-running job a fresh full budget.
+func (s *Scheduler) remaining(t state.Task) time.Duration {
+	if t.StartedAt == nil {
+		return s.cfg.TaskTimeout
+	}
+	left := s.cfg.TaskTimeout - s.now().Sub(*t.StartedAt)
+	if left < time.Minute {
+		return time.Minute
+	}
+	return left
 }
 
 func (s *Scheduler) markLost(id, reason string) {
@@ -176,8 +215,12 @@ func (s *Scheduler) block(t state.Task, on state.Blocker) {
 	})
 }
 
-func (s *Scheduler) launch(ctx context.Context, t state.Task) {
-	runCtx, cancel := context.WithTimeout(ctx, s.cfg.TaskTimeout)
+// A job's deadline is its own, not the daemon's. Tying it to the daemon context
+// would mean every shutdown killed the work in flight, which is the opposite of
+// what re-adoption is for: a restart should leave jobs running and pick them up
+// again. Only a cancel or the task's own timeout ends a job early.
+func (s *Scheduler) launch(_ context.Context, t state.Task) {
+	runCtx, cancel := context.WithTimeout(context.Background(), s.cfg.TaskTimeout)
 	s.mu.Lock()
 	s.running[t.ID] = cancel
 	s.mu.Unlock()
@@ -223,7 +266,7 @@ func (s *Scheduler) execute(ctx context.Context, t state.Task) {
 		env["CLAUDE_CODE_OAUTH_TOKEN"] = s.cfg.ClaudeToken
 	}
 
-	logFile, err := os.OpenFile(s.store.LogPath(t.ID), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	logFile, err := s.openLog(t.ID)
 	if err != nil {
 		s.fail(t.ID, err.Error())
 		return
@@ -231,7 +274,31 @@ func (s *Scheduler) execute(ctx context.Context, t state.Task) {
 	defer logFile.Close()
 	fmt.Fprintf(logFile, "===== attempt %d at %s =====\n", t.Attempts, s.now().Format(time.RFC3339))
 
-	code, runErr := s.exec.Execute(ctx, t, task.BuildScript(spec, env), logFile)
+	script := task.BuildScript(spec, env)
+	s.settle(ctx, t, logFile, func() (int, error) {
+		return s.exec.Execute(ctx, t, script, logFile)
+	})
+}
+
+func (s *Scheduler) readoptRun(ctx context.Context, t state.Task) {
+	logFile, err := s.openLog(t.ID)
+	if err != nil {
+		s.markLost(t.ID, fmt.Sprintf("re-adopted but its log could not be opened: %v", err))
+		return
+	}
+	defer logFile.Close()
+	fmt.Fprintf(logFile, "===== re-adopted by the daemon at %s =====\n", s.now().Format(time.RFC3339))
+	s.settle(ctx, t, logFile, func() (int, error) { return s.exec.Adopt(ctx, t) })
+}
+
+func (s *Scheduler) openLog(id string) (*os.File, error) {
+	return os.OpenFile(s.store.LogPath(id), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+}
+
+// Everything that happens to a task once its job has an outcome, shared by a
+// fresh run and a re-adopted one so the two cannot drift apart.
+func (s *Scheduler) settle(ctx context.Context, t state.Task, logFile *os.File, run func() (int, error)) {
+	code, runErr := run()
 	if runErr != nil {
 		fmt.Fprintf(logFile, "runner error: %v\n", runErr)
 		if ctx.Err() != nil {
@@ -255,6 +322,7 @@ func (s *Scheduler) execute(ctx context.Context, t state.Task) {
 			u.Status = state.StatusBlocked
 			u.BlockedOn = state.BlockedOnClaude
 			u.StartedAt = nil
+			u.ExecPGID = 0
 			u.Error = "waiting for claude usage"
 		})
 		return
@@ -275,6 +343,7 @@ func (s *Scheduler) execute(ctx context.Context, t state.Task) {
 		u.Status = status
 		u.ExitCode = code
 		u.FinishedAt = &finished
+		u.ExecPGID = 0
 		u.Error = ""
 	})
 }

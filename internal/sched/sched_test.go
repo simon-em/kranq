@@ -17,12 +17,41 @@ import (
 )
 
 type fakeExec struct {
-	mu      sync.Mutex
-	ran     []string
-	code    int
-	err     error
-	hold    chan struct{}
-	started chan string
+	mu       sync.Mutex
+	ran      []string
+	adopted  []string
+	code     int
+	err      error
+	hold     chan struct{}
+	started  chan string
+	adoptIDs map[string]bool
+}
+
+func (f *fakeExec) Adoptable(t state.Task) bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.adoptIDs[t.ID]
+}
+
+func (f *fakeExec) Adopt(ctx context.Context, t state.Task) (int, error) {
+	f.mu.Lock()
+	f.adopted = append(f.adopted, t.ID)
+	hold, code, err := f.hold, f.code, f.err
+	f.mu.Unlock()
+	if hold != nil {
+		select {
+		case <-hold:
+		case <-ctx.Done():
+			return -1, ctx.Err()
+		}
+	}
+	return code, err
+}
+
+func (f *fakeExec) adoptedIDs() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.adopted...)
 }
 
 func (f *fakeExec) Execute(ctx context.Context, t state.Task, script string, out *os.File) (int, error) {
@@ -249,7 +278,7 @@ func TestARestartMarksARunningTaskLostAndNeverRequeuesIt(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	s.Recover()
+	s.Recover(context.Background())
 
 	got, _ := store.Get("a")
 	if got.Status != state.StatusLost {
@@ -270,7 +299,7 @@ func TestRecoverLeavesQueuedWorkAlone(t *testing.T) {
 	exec := &fakeExec{}
 	s, store, now := harness(t, exec)
 	queue(t, store, "a", *now, shellSpec)
-	s.Recover()
+	s.Recover(context.Background())
 	if got, _ := store.Get("a"); got.Status != state.StatusQueued {
 		t.Errorf("status = %q; a task that never started is safe to keep", got.Status)
 	}
@@ -390,4 +419,77 @@ func TestCancellationIsNotOverwrittenByTheInterruptedRun(t *testing.T) {
 			"rewrite a deliberate cancellation as lost", got.Status)
 	}
 	close(exec.hold)
+}
+
+func TestARestartReadoptsAJobThatSurvivedIt(t *testing.T) {
+	exec := &fakeExec{adoptIDs: map[string]bool{"a": true}, code: 0}
+	s, store, now := harness(t, exec)
+	queue(t, store, "a", *now, shellSpec)
+	started := now.Add(-time.Minute)
+	if _, err := store.Update("a", func(u *state.Task) {
+		u.Status = state.StatusRunning
+		u.StartedAt = &started
+		u.ExecPGID = 4242
+		u.Attempts = 1
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Recover(context.Background())
+
+	got := waitFor(t, store, "a", state.StatusSucceeded)
+	if got.ExitCode != 0 {
+		t.Fatalf("exit code %d", got.ExitCode)
+	}
+	if ids := exec.adoptedIDs(); len(ids) != 1 || ids[0] != "a" {
+		t.Fatalf("adopted %v; a surviving job must be waited on, not restarted", ids)
+	}
+	if len(exec.idsRun()) != 0 {
+		t.Fatal("a surviving job was started a second time, which is the duplicate-run bug")
+	}
+	if got.Attempts != 1 {
+		t.Fatalf("attempts = %d; re-adopting is not a new attempt", got.Attempts)
+	}
+}
+
+func TestARestartStillLosesAJobThatDidNotSurvive(t *testing.T) {
+	exec := &fakeExec{adoptIDs: map[string]bool{}}
+	s, store, now := harness(t, exec)
+	queue(t, store, "a", *now, shellSpec)
+	if _, err := store.Update("a", func(u *state.Task) {
+		u.Status = state.StatusRunning
+		u.ExecPGID = 4242
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	s.Recover(context.Background())
+
+	got, _ := store.Get("a")
+	if got.Status != state.StatusLost {
+		t.Fatalf("status = %q, want lost", got.Status)
+	}
+	if len(exec.adoptedIDs()) != 0 {
+		t.Fatal("a job that is gone was adopted anyway")
+	}
+}
+
+// A re-adopted job keeps the deadline it already started against, so a restart
+// cannot be used to extend a run indefinitely.
+func TestReadoptionDoesNotHandTheJobAFreshTimeout(t *testing.T) {
+	exec := &fakeExec{}
+	s, _, now := harness(t, exec)
+	s.cfg.TaskTimeout = time.Hour
+
+	long := now.Add(-50 * time.Minute)
+	if got := s.remaining(state.Task{StartedAt: &long}); got > 11*time.Minute {
+		t.Fatalf("remaining = %s; the elapsed time was not deducted", got)
+	}
+	overdue := now.Add(-90 * time.Minute)
+	if got := s.remaining(state.Task{StartedAt: &overdue}); got != time.Minute {
+		t.Fatalf("remaining = %s; an overdue job needs a floor, not a negative deadline", got)
+	}
+	if got := s.remaining(state.Task{}); got != time.Hour {
+		t.Fatalf("remaining = %s; a job with no start time gets the full budget", got)
+	}
 }

@@ -8,23 +8,18 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
-	"path/filepath"
 	"strconv"
 	"syscall"
 	"time"
 
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/effetmonstre/forge/assets"
 
 	"github.com/effetmonstre/forge/internal/daemon"
 	"github.com/effetmonstre/forge/internal/deps"
 	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/image"
 	"github.com/effetmonstre/forge/internal/ipc"
-	"github.com/effetmonstre/forge/internal/run"
 	"github.com/effetmonstre/forge/internal/selfinstall"
-	"github.com/effetmonstre/forge/internal/vm"
 )
 
 func daemonConfig() daemon.Config {
@@ -65,22 +60,21 @@ func newDaemon() (*daemon.Daemon, error) {
 	if cfg.GitRemote == "" {
 		cfg.GitRemote = defaultRemote
 	}
-	driver := vm.Lima{Bin: limactlPath(cfg.Home), Home: cfg.LimaHome}
-	engine := &run.Engine{
-		Driver: driver,
-		Images: &image.Manager{Driver: driver, Template: assets.LimaTemplate},
-		Assets: assets.MCP(),
-	}
-	runner := &daemon.Runner{
-		Engine: engine, RemoteBase: cfg.GitRemote, AgentRoot: cfg.Home,
-		FenceDir: filepath.Join(cfg.Home, "fence"), Node: nodeName(),
-	}
-	d, err := daemon.New(cfg, runner)
+	self, err := os.Executable()
 	if err != nil {
 		return nil, err
 	}
-	runner.ArtifactsDir = d.ArtifactsDir
-	runner.Record = d.RecordVM
+	// The daemon does not run jobs itself. It starts `forge exec` in its own
+	// process group and reads what that records, so a job outlives a restart
+	// and a restarted daemon can pick it back up.
+	sup := &daemon.Supervisor{Binary: self, Home: cfg.Home}
+	d, err := daemon.New(cfg, sup)
+	if err != nil {
+		return nil, err
+	}
+	sup.TaskDir = d.TaskDir
+	sup.RecordPGID = d.RecordPGID
+	sup.RecordResult = d.RecordResult
 	return d, nil
 }
 
