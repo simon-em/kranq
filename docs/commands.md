@@ -65,6 +65,7 @@ FORGE_ENDPOINT=https://ci.example.com FORGE_TOKEN=forge_… \
 | `--endpoint` | `$FORGE_ENDPOINT` | `ssh://user@host:port` or `https://host` |
 | `--token` | `$FORGE_TOKEN` | required for https, ignored for ssh |
 | `--ssh-key` | `$FORGE_SSH_KEY` | identity to push with, for ssh |
+| `--receive-pack` | `$HOME/.local/bin/forge` | forge on the far side, so no forge-specific key is needed; `""` to rely on a forced command |
 | `--repo` | `$FORGE_REPO`, `$CI_REPO` | name the repository has on the runner |
 | `--branch` | `$CI_BRANCH`, `$BITBUCKET_BRANCH` | branch name to report for the run |
 | `--rev` | `HEAD` | what to send |
@@ -167,6 +168,7 @@ override. Secrets are never printed, by `ls` or by `get`.
 | `FORGE_LIMA_HOME` | lima's default | where forge keeps its VMs |
 | `FORGE_HTTP_ADDR` | off | loopback address for the git endpoint |
 | `FORGE_NODE` | the hostname | what this machine calls itself in a fence record |
+| `FORGE_AUTO_CREATE_REPOS` | on | make a repository on first push |
 | `FORGE_HOME` | `~/.forge` | everything above lives here |
 | `FORGE_AUTOSTART` | on | `0` stops commands starting a daemon |
 
@@ -192,8 +194,10 @@ forge repo create dx     # so a plain git push to its path works
 forge repo rm dx         # the next push recreates it
 ```
 
-A push through a forge key or token creates the repository on arrival.
-`create` is for pushing straight to the path with an ordinary ssh key.
+A push creates the repository on arrival unless
+`FORGE_AUTO_CREATE_REPOS=false`. `create` is for that case, and for pushing
+straight to a repository's real path, where git runs the real `git-receive-pack`
+and no forge code is in the loop to create anything.
 
 ### `forge token create|ls|revoke`
 

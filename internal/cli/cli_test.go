@@ -314,3 +314,39 @@ func TestLimaHomeComesFromTheConfigFileToo(t *testing.T) {
 		t.Fatalf("got %v, want the environment to win", got)
 	}
 }
+
+// A setting forge actually reads must be in the known list, or `config set`
+// warns that it is unused and the person reasonably assumes it does nothing.
+func TestEverySettingTheDaemonReadsIsDocumented(t *testing.T) {
+	for _, name := range []string{
+		"FORGE_MAX_VMS", "FORGE_MEMORY_HEADROOM_MB", "FORGE_GIT_REMOTE",
+		"FORGE_LIMA_HOME", "FORGE_HTTP_ADDR", "FORGE_NODE", "FORGE_AUTO_CREATE_REPOS",
+	} {
+		if _, ok := knownSettings[name]; !ok {
+			t.Errorf("%s is read by the daemon but `forge config set` calls it unknown", name)
+		}
+	}
+}
+
+func TestAutoCreateReposDefaultsOn(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("FORGE_HOME", home)
+	t.Setenv("FORGE_AUTO_CREATE_REPOS", "")
+	if !daemonConfig().AutoCreateRepos {
+		t.Fatal("the simple case should not need a setting to work")
+	}
+	for _, off := range []string{"false", "0", "no", "off", "FALSE"} {
+		if err := daemon.SetEnv(home, "FORGE_AUTO_CREATE_REPOS", off); err != nil {
+			t.Fatal(err)
+		}
+		if daemonConfig().AutoCreateRepos {
+			t.Errorf("%q did not turn it off", off)
+		}
+	}
+	if err := daemon.SetEnv(home, "FORGE_AUTO_CREATE_REPOS", "true"); err != nil {
+		t.Fatal(err)
+	}
+	if !daemonConfig().AutoCreateRepos {
+		t.Error("true did not turn it back on")
+	}
+}

@@ -22,6 +22,34 @@ const (
 
 func (c SSHCommand) Writes() bool { return c.Verb == VerbReceive }
 
+// RepoFromPath handles the other way in: `git push --receive-pack="forge
+// git-receive"` makes git run forge directly with the repository as an
+// argument, so no forced command and no forge-specific key is involved at all.
+// Whoever can already ssh to the machine can push.
+func RepoFromPath(path string) (string, error) {
+	trimmed := strings.Trim(strings.TrimSpace(path), "/")
+	if trimmed == "" {
+		return "", fmt.Errorf("no repository given")
+	}
+	// A full path is accepted so that pushing to the repository's real location
+	// works too; only its last part names the repository, and the store is
+	// where it resolves either way. A ".." segment cannot reach outside the
+	// store, but it means the caller intended somewhere else, and quietly
+	// reinterpreting that is worse than refusing it.
+	for _, segment := range strings.Split(trimmed, "/") {
+		if segment == ".." {
+			return "", fmt.Errorf("%q is not a repository name", path)
+		}
+	}
+	if i := strings.LastIndex(trimmed, "/"); i >= 0 {
+		trimmed = trimmed[i+1:]
+	}
+	if err := ValidRepo(trimmed); err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(trimmed, ".git"), nil
+}
+
 func ParseSSHCommand(original string) (SSHCommand, error) {
 	var cmd SSHCommand
 	trimmed := strings.TrimSpace(original)
@@ -40,6 +68,24 @@ func ParseSSHCommand(original string) (SSHCommand, error) {
 			return cmd, fmt.Errorf("%q is not a git command", firstWord(trimmed))
 		}
 		verb, rest = "git-"+sub, remainder
+	}
+	// A client may ask for forge itself as the receive-pack. Under a forced
+	// command that arrives here rather than as an argument, and refusing it
+	// would break the combination of a locked-down key and a client set up for
+	// the no-setup path.
+	if strings.HasSuffix(verb, "/forge") || verb == "forge" {
+		sub, remainder, found := strings.Cut(strings.TrimSpace(rest), " ")
+		if !found {
+			return cmd, fmt.Errorf("%q is not a git command", firstWord(trimmed))
+		}
+		switch sub {
+		case "git-receive":
+			verb, rest = VerbReceive, remainder
+		case "git-upload":
+			verb, rest = VerbUpload, remainder
+		default:
+			return cmd, fmt.Errorf("%q is not allowed here", firstWord(sub))
+		}
 	}
 	if verb != VerbReceive && verb != VerbUpload {
 		return cmd, fmt.Errorf("%q is not allowed; this key may only push and fetch", firstWord(trimmed))

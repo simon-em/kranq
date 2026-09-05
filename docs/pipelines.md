@@ -37,9 +37,14 @@ Bumping forge is then a one-line diff to `forge.lock` that reverts cleanly. Add
       - infrastructure/ci/forge push ci/tasks/spec.yaml --repo dx
 ```
 
-The pipeline already has an ssh agent, and its key can be the push key. Add it
-on the build machine with `forge key add bitbucket-dx <key>.pub`, and the forced
-command confines it to pushing.
+If the pipeline's key already reaches the build machine, that is all of it:
+forge asks for itself as the receive-pack, so nothing is set up on the far side
+and the repository is created on the first push.
+
+For a pipeline that should be able to push and nothing else, give it its own key
+and add it with `forge key add bitbucket-dx <key>.pub`. The forced command then
+confines it, which is worth doing for a shared credential even though it is not
+required.
 
 If the pipeline has no ambient ssh setup, give it a key in a secured variable and
 point `FORGE_SSH_KEY` at a file you write from it.

@@ -31,6 +31,10 @@ type Config struct {
 	GitRemote      string
 	LimaHome       string
 	HTTPAddr       string
+	// A push to a name nothing has used yet makes the repository, which is what
+	// keeps the simple case to one command. Turn it off on a machine that should
+	// only ever accept repositories somebody set up deliberately.
+	AutoCreateRepos bool
 }
 
 func (c Config) SocketPath() string { return sockpath.For(filepath.Join(c.Home, "forge.sock")) }

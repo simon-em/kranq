@@ -42,8 +42,12 @@ token or ssh agent. This is what a pipeline that already has credentials does.
 
 ```sh
 git remote add forge ssh://macmini@buildhost:333/dx.git
-git push forge main -o task=ci/tasks/spec.yaml
+git config remote.forge.receivepack '$HOME/.local/bin/forge git-receive'
+git push forge main:refs/heads/run -o task=ci/tasks/spec.yaml
 ```
+
+If your ssh key already reaches the machine, that is the whole setup: the
+repository is created on the first push, and no forge-specific key is involved.
 
 The build log streams back to your terminal as it runs. Nothing is cloned, so
 nothing needs a credential to read the code, and a commit that exists nowhere

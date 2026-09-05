@@ -113,3 +113,60 @@ func TestAnSSHPathMustBeExactlyOneSegment(t *testing.T) {
 		t.Fatalf("got %+v, %v", got, err)
 	}
 }
+
+// The other way in: `git push --receive-pack="forge git-receive"` makes git run
+// forge with the repository as an argument, so no forced command and no
+// forge-specific key are involved. Anyone who can already ssh here can push.
+func TestRepoFromPath(t *testing.T) {
+	cases := map[string]string{
+		"dx.git":                             "dx",
+		"/dx.git":                            "dx",
+		"dx":                                 "dx",
+		"/Users/macmini/.forge/repos/dx.git": "dx",
+		"~/.forge/repos/my-repo.git":         "my-repo",
+	}
+	for in, want := range cases {
+		got, err := RepoFromPath(in)
+		if err != nil {
+			t.Fatalf("%q: %v", in, err)
+		}
+		if got != want {
+			t.Fatalf("%q -> %q, want %q", in, got, want)
+		}
+	}
+	for _, bad := range []string{"", "  ", "/", "///", ".git", "../x.git"} {
+		if got, err := RepoFromPath(bad); err == nil {
+			t.Fatalf("%q was accepted as %q", bad, got)
+		}
+	}
+}
+
+// A client set up for the no-setup path, pushing to a key whose forced command
+// already decides what runs, must not be refused by the parser.
+func TestAForcedCommandAcceptsForgesOwnReceivePack(t *testing.T) {
+	got, err := ParseSSHCommand(`/Users/macmini/.local/bin/forge git-receive 'dx.git'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Verb != VerbReceive || got.Repo != "dx" {
+		t.Fatalf("%+v", got)
+	}
+	up, err := ParseSSHCommand(`/Users/macmini/.local/bin/forge git-upload 'dx.git'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if up.Verb != VerbUpload {
+		t.Fatalf("%+v", up)
+	}
+	// But forge is not a way to run anything else.
+	for _, bad := range []string{
+		`/Users/macmini/.local/bin/forge daemon stop`,
+		`/Users/macmini/.local/bin/forge exec some-task`,
+		`/Users/macmini/.local/bin/forge auth claude --show`,
+		`forge config set X=1`,
+	} {
+		if _, err := ParseSSHCommand(bad); err == nil {
+			t.Fatalf("%q was accepted", bad)
+		}
+	}
+}

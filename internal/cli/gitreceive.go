@@ -23,17 +23,27 @@ func runGitReceive(env Env, args []string) int {
 	fs := flag.NewFlagSet("git-receive", flag.ContinueOnError)
 	fs.SetOutput(env.Stderr)
 	name := fs.String("name", "", "which key this is, for the log")
-	if _, err := parsePermuted(fs, args); err != nil {
+	upload := fs.Bool("upload", false, "serve a fetch rather than a push")
+	rest, err := parsePermuted(fs, args)
+	if err != nil {
 		return exitcode.Usage
 	}
 
-	cmd, err := gitsrv.ParseSSHCommand(os.Getenv("SSH_ORIGINAL_COMMAND"))
+	cmd, err := receiveTarget(rest, *upload)
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
 		return exitcode.Unauthorized
 	}
 
 	home := forgeHome()
+	cfg := daemonConfig()
+	if !cfg.AutoCreateRepos {
+		if _, statErr := os.Stat(filepath.Join(home, "repos", cmd.Repo+".git")); statErr != nil {
+			fmt.Fprintf(env.Stderr, "forge: no repository called %q here, and this machine "+
+				"does not create them on demand.\nforge repo create %s\n", cmd.Repo, cmd.Repo)
+			return exitcode.Misconfigured
+		}
+	}
 	self, err := os.Executable()
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
@@ -42,7 +52,7 @@ func runGitReceive(env Env, args []string) int {
 	store := &gitsrv.Store{
 		Root:       filepath.Join(home, "repos"),
 		ForgeBin:   self,
-		SocketPath: daemonConfig().SocketPath(),
+		SocketPath: cfg.SocketPath(),
 	}
 	dir, err := store.Ensure(context.Background(), cmd.Repo)
 	if err != nil {
@@ -63,6 +73,25 @@ func runGitReceive(env Env, args []string) int {
 		return exitcode.InternalError
 	}
 	return exitcode.InternalError
+}
+
+// Two ways in. Under a forced command, ssh puts what git asked for in
+// SSH_ORIGINAL_COMMAND. With `git push --receive-pack="forge git-receive"`,
+// git runs forge directly and the repository arrives as an argument, which is
+// what lets anyone who can already ssh here push without a forge-specific key.
+func receiveTarget(args []string, upload bool) (gitsrv.SSHCommand, error) {
+	if len(args) > 0 {
+		repo, err := gitsrv.RepoFromPath(args[0])
+		if err != nil {
+			return gitsrv.SSHCommand{}, err
+		}
+		verb := gitsrv.VerbReceive
+		if upload {
+			verb = gitsrv.VerbUpload
+		}
+		return gitsrv.SSHCommand{Verb: verb, Repo: repo}, nil
+	}
+	return gitsrv.ParseSSHCommand(os.Getenv("SSH_ORIGINAL_COMMAND"))
 }
 
 // git's helpers are not on PATH on macOS, and a non-login ssh session has a

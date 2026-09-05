@@ -148,3 +148,28 @@ func TestSSHCommandQuotesAPathWithSpaces(t *testing.T) {
 		t.Fatalf("a path with a space was not quoted: %q", got)
 	}
 }
+
+// Asking for forge as the receive-pack is what lets an ordinary ssh key push:
+// git runs forge on the far side itself, so nothing has to be set up there.
+func TestSSHPushAsksForForgeAsTheReceivePack(t *testing.T) {
+	if defaultReceivePack == "" {
+		t.Fatal("there is no default, so a plain ssh endpoint needs server-side setup")
+	}
+	if !strings.Contains(defaultReceivePack, "forge") {
+		t.Fatalf("the default does not name forge: %q", defaultReceivePack)
+	}
+	// $HOME rather than a literal path: the far side expands it, and forge does
+	// not know that machine's home directory.
+	if !strings.HasPrefix(defaultReceivePack, "$HOME/") {
+		t.Fatalf("the default assumes a path forge cannot know: %q", defaultReceivePack)
+	}
+}
+
+func TestOrElse(t *testing.T) {
+	if got := orElse("", "fallback"); got != "fallback" {
+		t.Fatalf("got %q", got)
+	}
+	if got := orElse("set", "fallback"); got != "set" {
+		t.Fatalf("got %q", got)
+	}
+}

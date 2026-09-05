@@ -31,6 +31,8 @@ func runPush(env Env, args []string) int {
 	keep := fs.String("keep-vm", "", "keep the job VM: never, on-failure, always")
 	rev := fs.String("rev", "HEAD", "what to send")
 	sshKey := fs.String("ssh-key", envOr("FORGE_SSH_KEY"), "identity to push with, for an ssh:// endpoint")
+	receivePack := fs.String("receive-pack", orElse(envOr("FORGE_RECEIVE_PACK"), defaultReceivePack),
+		"forge on the far side, so no forge-specific ssh key is needed")
 	detach := fs.Bool("detach", false, "queue it and return without following")
 	forward := envFlag{}
 	fs.Var(forward, "env", "NAME=VALUE, or bare NAME to forward it from this environment")
@@ -84,7 +86,15 @@ func runPush(env Env, args []string) int {
 	if dest == "" {
 		dest = "forge-push"
 	}
-	args = append([]string{"push", "--force", target}, options...)
+	args = []string{"push", "--force"}
+	// Asking for forge as the receive-pack is what lets an ordinary ssh key
+	// push: git runs forge on the far side itself, so nothing has to be set up
+	// there first. A forced-command key ignores this and still works.
+	if isSSH(*endpoint) && *receivePack != "" {
+		args = append(args, "--receive-pack="+*receivePack+" git-receive")
+	}
+	args = append(args, target)
+	args = append(args, options...)
 	args = append(args, *rev+":refs/heads/"+dest)
 
 	cmd := exec.Command("git", args...)
@@ -162,6 +172,18 @@ func pushURL(endpoint, repo, secret string) (string, error) {
 }
 
 func isSSH(endpoint string) bool { return strings.HasPrefix(endpoint, "ssh://") }
+
+// Where forge installs itself. Overridable for a machine that put it elsewhere,
+// and clearable with --receive-pack="" for a key whose forced command already
+// decides what runs.
+const defaultReceivePack = "$HOME/.local/bin/forge"
+
+func orElse(value, fallback string) string {
+	if value != "" {
+		return value
+	}
+	return fallback
+}
 
 // IdentitiesOnly matters: the push key is a forced-command key that can do
 // nothing but push, and it usually sits beside an ordinary key for the same

@@ -12,7 +12,7 @@ The build log streams back to your terminal line by line while it runs, the way
 Heroku and Dokku do it.
 
 - [Why it is worth the machinery](#why)
-- [Setting it up over ssh](#ssh) — no tunnel, no token, no size limit
+- [Over ssh](#ssh) — no tunnel, no token, no size limit, and usually no setup
 - [Setting it up over https](#https) — for callers that cannot ssh
 - [The push options](#options)
 - [Exit codes, and the one thing a push cannot carry](#exit-codes)
@@ -47,10 +47,38 @@ host, and its fence lives there too. `maintenance.yaml` still forwards
 If you can already ssh to the build machine, this is the path to use. No tunnel,
 no token, and no request body limit to run into on a first push.
 
-### On the build machine, once
+### The simple way: nothing to set up
+
+**If your key already reaches the machine, you can already push.** Git lets the
+client say what to run on the far side, so it runs forge directly:
 
 ```sh
-forge key add ci-laptop ~/path/to/pushkey.pub
+forge push ci/tasks/spec.yaml --repo dx     # FORGE_ENDPOINT=ssh://macmini@host:333
+```
+
+or with plain git, once per clone:
+
+```sh
+git remote add forge ssh://macmini@host:333/dx.git
+git config remote.forge.receivepack '$HOME/.local/bin/forge git-receive'
+git push forge main:refs/heads/run -o task=ci/tasks/spec.yaml
+```
+
+The repository is created on the first push. Nothing is installed on the build
+machine beyond forge itself, and no forge-specific key exists.
+
+`forge push` asks for this by default. `--receive-pack PATH` points at a forge
+installed somewhere else; `--receive-pack=""` turns it off for a key whose forced
+command already decides what runs.
+
+### The locked-down way: a key that can only push
+
+The simple path gives whoever pushes a full shell, because it uses the key they
+already had. For a CI system that should be able to push and nothing else, give
+it its own key with a forced command:
+
+```sh
+forge key add ci-laptop ~/path/to/pushkey.pub     # on the build machine
 ```
 
 That appends one line to `~/.ssh/authorized_keys`:
@@ -78,10 +106,20 @@ forge: "cat" is not allowed; this key may only push and fetch
 own marker, because that file is usually how you administer the machine and
 losing a line locks you out.
 
-### On the machine that pushes
+### Which to use
+
+| | simple | forced-command key |
+| --- | --- | --- |
+| setup on the build machine | none | `forge key add` |
+| what the pusher can do there | whatever their key already allowed | push and fetch, nothing else |
+| good for | you, from a laptop | a pipeline, a shared credential |
+
+### Pinning the identity, when you have both
+
+A forge push key sits beside your ordinary key for the same host, and ssh offers
+keys in its own order. `--ssh-key` sets `IdentitiesOnly`, or in `~/.ssh/config`:
 
 ```
-# ~/.ssh/config
 Host forge-mini
     HostName 142.127.69.2
     Port 333
@@ -90,30 +128,27 @@ Host forge-mini
     IdentitiesOnly yes
 ```
 
-`IdentitiesOnly` matters: the push key sits beside an ordinary key for the same
-host, and ssh offers keys in its own order. Without it, ssh presents the ordinary
-key, gets a shell, and the forced command never runs.
+Without `IdentitiesOnly`, ssh presents the ordinary key, gets a shell, and the
+forced command never runs.
+
+### Repositories are made on arrival
+
+A push to a name nothing has used yet creates it. On a machine that should only
+accept repositories somebody set up deliberately:
 
 ```sh
-git remote add forge ssh://forge-mini/dx.git
-git push forge main -o task=ci/tasks/spec.yaml
+forge config set FORGE_AUTO_CREATE_REPOS=false
 ```
 
-The repository is created on the first push.
-
-### Without a forge key at all
-
-Anyone who already has shell access can push straight to the repository's real
-path, because the hooks live in the repository:
+Then an unknown name is refused, and `forge repo create <name>` is how one
+appears. `forge repo create` is also what makes a **plain path push** work,
+where git runs the real `git-receive-pack` and no forge code is in the loop to
+create anything:
 
 ```sh
-forge repo create dx                       # on the build machine, once
 git push ssh://macmini@buildhost:333/Users/macmini/.forge/repos/dx.git \
     -o task=ci/tasks/spec.yaml HEAD:refs/heads/run
 ```
-
-`forge repo create` is needed because only the forced command creates a
-repository on arrival; a plain push to a path cannot.
 
 <a name="https"></a>
 

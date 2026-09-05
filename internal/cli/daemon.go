@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -26,14 +27,15 @@ func daemonConfig() daemon.Config {
 	home := forgeHome()
 	get := settings(home)
 	return daemon.Config{
-		Home:           home,
-		Version:        Version,
-		MaxVMs:         settingInt(get, "FORGE_MAX_VMS", 2),
-		MemoryHeadroom: int64(settingInt(get, "FORGE_MEMORY_HEADROOM_MB", 2048)) << 20,
-		ClaudeToken:    get("CLAUDE_CODE_OAUTH_TOKEN"),
-		GitRemote:      get("FORGE_GIT_REMOTE"),
-		LimaHome:       get("FORGE_LIMA_HOME"),
-		HTTPAddr:       get("FORGE_HTTP_ADDR"),
+		Home:            home,
+		Version:         Version,
+		MaxVMs:          settingInt(get, "FORGE_MAX_VMS", 2),
+		MemoryHeadroom:  int64(settingInt(get, "FORGE_MEMORY_HEADROOM_MB", 2048)) << 20,
+		ClaudeToken:     get("CLAUDE_CODE_OAUTH_TOKEN"),
+		GitRemote:       get("FORGE_GIT_REMOTE"),
+		LimaHome:        get("FORGE_LIMA_HOME"),
+		HTTPAddr:        get("FORGE_HTTP_ADDR"),
+		AutoCreateRepos: settingBool(get, "FORGE_AUTO_CREATE_REPOS", true),
 	}
 }
 
@@ -51,6 +53,18 @@ func settings(home string) func(string) string {
 		}
 		return stored[name]
 	}
+}
+
+// Defaults to on, so an unset value and a missing file both mean the simple
+// behaviour rather than a locked-down one nobody asked for.
+func settingBool(get func(string) string, name string, fallback bool) bool {
+	switch strings.ToLower(get(name)) {
+	case "":
+		return fallback
+	case "0", "false", "no", "off":
+		return false
+	}
+	return true
 }
 
 func settingInt(get func(string) string, name string, fallback int) int {
