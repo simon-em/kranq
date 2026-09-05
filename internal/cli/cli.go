@@ -44,6 +44,7 @@ func init() {
 		"doctor":    {"doctor [--json]", "check this machine can run tasks", runDoctor},
 		"upgrade":   {"upgrade <path> [--force]", "replace the installed forge, keeping the previous", runUpgrade},
 		"rollback":  {"rollback [--force]", "go back to the previous forge binary", runRollback},
+		"peer":      {"peer add|ls|rm|test|upgrade", "manage the other build machines", runPeer},
 		"render":    {"render <task.yaml>", "print the bash script a spec compiles to", runRender},
 		"help":      {"help [command]", "show usage", runHelp},
 	}
