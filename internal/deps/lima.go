@@ -59,11 +59,27 @@ func (l Lima) Installed() bool {
 	return err == nil && !info.IsDir()
 }
 
-func (l Lima) Install(out io.Writer) error {
-	asset, ok := limaAsset[runtime.GOARCH]
-	if !ok {
-		return fmt.Errorf("no lima build for %s/%s", runtime.GOOS, runtime.GOARCH)
+// Supported says whether this machine can run lima at all. The asset table is
+// keyed by architecture and every entry in it is a macOS build, so without the
+// GOOS check a linux client would happily download a Darwin tarball and call it
+// installed.
+func Supported() bool {
+	if runtime.GOOS != "darwin" {
+		return false
 	}
+	_, ok := limaAsset[runtime.GOARCH]
+	return ok
+}
+
+func errUnsupported() error {
+	return fmt.Errorf("no lima build for %s/%s", runtime.GOOS, runtime.GOARCH)
+}
+
+func (l Lima) Install(out io.Writer) error {
+	if !Supported() {
+		return errUnsupported()
+	}
+	asset := limaAsset[runtime.GOARCH]
 	want := limaSHA256[runtime.GOARCH]
 
 	// Created here and not left to MkdirAll's parent creation, which would give

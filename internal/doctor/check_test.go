@@ -64,14 +64,32 @@ func TestGitVersionSaysWhyItMatters(t *testing.T) {
 
 func TestLimaSourceFlagsALimaForgeDoesNotOwn(t *testing.T) {
 	root := "/Users/x/.forge"
-	if got := LimaSource(root+"/deps/current/bin/limactl", root).Level; got != OK {
+	if got := LimaSource(root+"/deps/current/bin/limactl", root, true).Level; got != OK {
 		t.Fatalf("forge's own lima: %v", got)
 	}
-	if got := LimaSource("/opt/homebrew/bin/limactl", root).Level; got != Warn {
+	if got := LimaSource("/opt/homebrew/bin/limactl", root, true).Level; got != Warn {
 		t.Fatalf("a homebrew lima should warn: %v", got)
 	}
-	if got := LimaSource("", root).Level; got != Fail {
-		t.Fatalf("no lima at all should fail: %v", got)
+}
+
+// Missing lima is only a failure on a machine that will not fetch it. When the
+// next job installs it anyway, telling someone to go and install it by hand is
+// worse than saying nothing.
+func TestMissingLimaIsOnlyAFailureWhenNothingWillFetchIt(t *testing.T) {
+	root := "/Users/x/.forge"
+	pending := LimaSource("", root, true)
+	if pending.Level != Warn {
+		t.Fatalf("with auto-install on: %v", pending.Level)
+	}
+	if pending.Fix != "" {
+		t.Fatalf("it suggests doing by hand what happens on its own: %q", pending.Fix)
+	}
+	blocked := LimaSource("", root, false)
+	if blocked.Level != Fail {
+		t.Fatalf("with auto-install off: %v", blocked.Level)
+	}
+	if blocked.Fix == "" {
+		t.Fatal("a real failure with no way out of it")
 	}
 }
 

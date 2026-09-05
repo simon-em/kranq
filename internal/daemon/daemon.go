@@ -35,6 +35,10 @@ type Config struct {
 	// keeps the simple case to one command. Turn it off on a machine that should
 	// only ever accept repositories somebody set up deliberately.
 	AutoCreateRepos bool
+	// Lima is fetched on first use rather than by a separate install step, so
+	// the command somebody ran is the command that happens. Turn it off on a
+	// machine that should never reach the network on its own.
+	AutoInstallDeps bool
 }
 
 func (c Config) SocketPath() string { return sockpath.For(filepath.Join(c.Home, "forge.sock")) }

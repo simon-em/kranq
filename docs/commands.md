@@ -169,6 +169,7 @@ override. Secrets are never printed, by `ls` or by `get`.
 | `FORGE_HTTP_ADDR` | off | loopback address for the git endpoint |
 | `FORGE_NODE` | the hostname | what this machine calls itself in a fence record |
 | `FORGE_AUTO_CREATE_REPOS` | on | make a repository on first push |
+| `FORGE_AUTO_INSTALL_DEPS` | on | fetch lima the first time a command needs a VM |
 | `FORGE_HOME` | `~/.forge` | everything above lives here |
 | `FORGE_AUTOSTART` | on | `0` stops commands starting a daemon |
 
@@ -260,6 +261,11 @@ Copies the running binary to `~/.local/bin`, adds it to PATH, and fetches Lima.
 | `--no-path` | do not touch shell startup files |
 | `--skip-deps` | do not install lima |
 | `--deps-only` | lima and launchd only: leave the binary where a package manager put it |
+
+Lima is fetched the first time a command actually needs a VM, so `--deps-only`
+is for getting that out of the way ahead of time rather than something you have
+to run. `FORGE_AUTO_INSTALL_DEPS=false` turns the automatic fetch off, and then
+a command that needs a VM says so instead.
 | `--client-only` | binary and PATH only: no lima, no launchd |
 | `--with-daemon` | also install and start the launchd job |
 

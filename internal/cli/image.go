@@ -24,6 +24,18 @@ func newManager() (*image.Manager, vm.Driver) {
 	return &image.Manager{Driver: driver, Template: assets.LimaTemplate}, driver
 }
 
+// For the commands that actually drive a VM, as opposed to listing what is
+// already there.
+func newManagerWithLima(env Env) (*image.Manager, vm.Driver, error) {
+	cfg := daemonConfig()
+	bin, err := ensureLima(env, cfg.Home)
+	if err != nil {
+		return nil, nil, err
+	}
+	driver := vm.Lima{Bin: bin, Home: cfg.LimaHome}
+	return &image.Manager{Driver: driver, Template: assets.LimaTemplate}, driver, nil
+}
+
 func runImage(env Env, args []string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(env.Stderr, "usage: forge image ls|build|prune")
@@ -75,7 +87,11 @@ func imageBuild(env Env, args []string) int {
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	m, _ := newManager()
+	m, _, err := newManagerWithLima(env)
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		return exitcode.MissingDep
+	}
 
 	if *repo == "" {
 		name := image.BaseName(assets.LimaTemplate, time.Now(), image.DefaultTTL)

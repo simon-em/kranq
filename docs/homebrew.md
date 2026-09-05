@@ -7,9 +7,11 @@ key you already have.
 ```sh
 brew tap effetmonstre/tap git@bitbucket.org:effetmonstre/homebrew-tap.git
 brew install forge
-forge install --deps-only          # forge fetches and verifies its own lima
 forge doctor
 ```
+
+That is the whole install. Lima is fetched and verified the first time a command
+actually needs a VM, so there is no second step to remember.
 
 ## Setting up the tap, once
 
@@ -67,11 +69,13 @@ brew owns **the binary and PATH**. forge owns everything else, deliberately:
   and calls it by absolute path, so a Homebrew lima appearing, disappearing or
   changing version cannot change what runs. It is verified against a checksum
   compiled into the binary *and* the published `SHA256SUMS`, which must agree.
-- `forge install --deps-only` does that half without copying the binary or
-  editing PATH, which is what keeps brew's copy the only copy.
+- It is fetched the first time a command needs a VM, so nothing has to be run
+  after `brew install`. `forge install --deps-only` does it ahead of time
+  instead, without copying the binary or editing PATH, which is what keeps
+  brew's copy the only copy.
 
 ```sh
-forge install --deps-only                  # lima
+forge install --deps-only                  # fetch lima now rather than later
 forge install --deps-only --with-daemon    # and a launchd job
 ```
 

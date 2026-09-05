@@ -58,7 +58,12 @@ func runExec(env Env, args []string) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	driver := vm.Lima{Bin: limactlPath(cfg.Home), Home: cfg.LimaHome}
+	limaBin, err := ensureLima(env, cfg.Home)
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		return exitcode.MissingDep
+	}
+	driver := vm.Lima{Bin: limaBin, Home: cfg.LimaHome}
 	runner := &daemon.Runner{
 		Engine: &run.Engine{
 			Driver: driver,

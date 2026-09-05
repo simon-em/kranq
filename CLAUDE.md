@@ -200,3 +200,13 @@ while the daemon read it from the file. Anything reading a setting goes through
 be re-adopted, and their contexts are not tied to the daemon's, so a wait can
 only time out while the old process sits on the lock and the next daemon fails
 to start.
+
+**Lima is fetched on first use, not by an install step.** `ensureLima` is what
+every command that drives a VM calls; `limactlPath` only reports and never
+installs, because doctor uses it and a check that fixes what it is checking is
+not a check. The download is behind a flock, since two commands starting at once
+would otherwise both fetch it.
+
+**`limaAsset` is keyed by architecture and every entry is a macOS build.** Guard
+on `GOOS` before installing, or the linux client downloads a Darwin tarball and
+reports success. `deps.Supported()` is that guard.

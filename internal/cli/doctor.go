@@ -148,8 +148,8 @@ func gitCheck(ctx context.Context) doctor.Check {
 
 func limaCheck(ctx context.Context, home string) doctor.Check {
 	bin := limactlPath(home)
-	source := doctor.LimaSource(bin, home)
-	if source.Level == doctor.Fail || bin == "" {
+	source := doctor.LimaSource(bin, home, daemonConfig().AutoInstallDeps)
+	if bin == "" || source.Level == doctor.Fail {
 		return source
 	}
 	if err := exec.CommandContext(ctx, bin, "list", "--format", "json").Run(); err != nil {

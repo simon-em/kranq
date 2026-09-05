@@ -134,7 +134,12 @@ func runRun(env Env, args []string) int {
 	}
 
 	daemonCfg := daemonConfig()
-	driver := vm.Lima{Bin: limactlPath(daemonCfg.Home), Home: daemonCfg.LimaHome}
+	limaBin, limaErr := ensureLima(env, daemonCfg.Home)
+	if limaErr != nil {
+		fmt.Fprintf(env.Stderr, "forge: %v\n", limaErr)
+		return exitcode.MissingDep
+	}
+	driver := vm.Lima{Bin: limaBin, Home: daemonCfg.LimaHome}
 	engine := &run.Engine{
 		Driver: driver,
 		Images: &image.Manager{Driver: driver, Template: assets.LimaTemplate},

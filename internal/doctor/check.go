@@ -103,10 +103,17 @@ func GitVersion(output string) Check {
 
 // forge invokes its own limactl by absolute path so a Homebrew lima appearing or
 // disappearing cannot change what runs.
-func LimaSource(binary, root string) Check {
+func LimaSource(binary, root string, autoInstall bool) Check {
 	const name = "lima"
 	if binary == "" {
-		return fail(name, "forge install", "no limactl; forge installs its own under %s/deps", root)
+		if autoInstall {
+			// Not a failure: the next command that needs a VM fetches it. Saying
+			// "run forge install" here would send someone to do by hand what is
+			// about to happen on its own.
+			return warn(name, "", "not installed yet; the next job fetches it into %s/deps", root)
+		}
+		return fail(name, "forge install --deps-only",
+			"not installed, and this machine does not fetch it automatically")
 	}
 	if !strings.HasPrefix(binary, root) {
 		return warn(name, "forge install", "using %s, which forge does not manage", binary)

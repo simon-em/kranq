@@ -22,6 +22,7 @@ var knownSettings = map[string]string{
 	"FORGE_HTTP_ADDR":          "loopback address for the git push endpoint, e.g. 127.0.0.1:8420",
 	"FORGE_NODE":               "what this machine calls itself in a fence record",
 	"FORGE_AUTO_CREATE_REPOS":  "make a repository on first push (default true)",
+	"FORGE_AUTO_INSTALL_DEPS":  "fetch lima on first use (default true)",
 	"CLAUDE_CODE_OAUTH_TOKEN":  "set it with `forge auth claude` instead",
 }
 

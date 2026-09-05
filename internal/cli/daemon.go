@@ -36,6 +36,7 @@ func daemonConfig() daemon.Config {
 		LimaHome:        get("FORGE_LIMA_HOME"),
 		HTTPAddr:        get("FORGE_HTTP_ADDR"),
 		AutoCreateRepos: settingBool(get, "FORGE_AUTO_CREATE_REPOS", true),
+		AutoInstallDeps: settingBool(get, "FORGE_AUTO_INSTALL_DEPS", true),
 	}
 }
 
@@ -318,12 +319,39 @@ func fingerprint(v string) string {
 	return hex.EncodeToString(sum[:6])
 }
 
+// limactlPath reports where lima is, or "" if it is not installed. It never
+// installs: doctor uses it to say what is missing, and a check that fixes what
+// it is checking is not a check.
 func limactlPath(home string) string {
 	lima := deps.Lima{Root: home}
 	if lima.Installed() {
 		return lima.Binary()
 	}
 	return ""
+}
+
+// ensureLima is what every command that actually needs a VM calls. Installing
+// on first use rather than making people run an install step means the thing
+// they asked for happens, which is the whole point of forge carrying its own
+// dependency.
+func ensureLima(env Env, home string) (string, error) {
+	lima := deps.Lima{Root: home}
+	if lima.Installed() {
+		return lima.Binary(), nil
+	}
+	if !daemonConfig().AutoInstallDeps {
+		return "", fmt.Errorf("lima is not installed and this machine does not fetch it automatically.\n" +
+			"run `forge install --deps-only`, or `forge config set FORGE_AUTO_INSTALL_DEPS=true`")
+	}
+	if !deps.Supported() {
+		return "", fmt.Errorf("this machine cannot run lima, so it cannot run jobs; " +
+			"use it as a client and point --endpoint at a build machine")
+	}
+	fmt.Fprintf(env.Stderr, "lima %s is needed and not installed yet, fetching it\n", deps.LimaVersion)
+	if err := selfinstall.EnsureHome(home); err != nil {
+		return "", err
+	}
+	return lima.EnsureInstalled(env.Stderr)
 }
 
 // nodeName only ever appears in a fence record, so a machine that cannot name

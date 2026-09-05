@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -162,5 +163,95 @@ func TestLimaIsNotOnTheGlobalPath(t *testing.T) {
 	if !strings.Contains(l.Binary(), ".forge/deps/current/bin/limactl") {
 		t.Errorf("Binary() = %q; lima must live under FORGE_HOME and be invoked by absolute path, "+
 			"so a homebrew lima appearing or disappearing cannot break forge", l.Binary())
+	}
+}
+
+// The asset table is keyed by architecture and every entry in it is a macOS
+// build, so without a GOOS check a linux client would download a Darwin tarball
+// and report success.
+func TestSupportedIsFalseOffDarwin(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		if !Supported() {
+			t.Fatalf("lima should be supported on %s/%s", runtime.GOOS, runtime.GOARCH)
+		}
+		return
+	}
+	if Supported() {
+		t.Fatalf("%s/%s reported as supported, but every asset is a macOS build",
+			runtime.GOOS, runtime.GOARCH)
+	}
+}
+
+func TestInstallRefusesAnUnsupportedPlatform(t *testing.T) {
+	if Supported() {
+		t.Skip("this machine is supported")
+	}
+	if err := (Lima{Root: t.TempDir()}).Install(io.Discard); err == nil {
+		t.Fatal("an unsupported platform was installed onto")
+	}
+}
+
+func TestEnsureInstalledIsANoOpWhenItIsAlreadyThere(t *testing.T) {
+	root := t.TempDir()
+	lima := Lima{Root: root}
+	// Stand in for an installed copy: the binary at the path Installed() checks.
+	bin := filepath.Join(lima.Dir(), "bin")
+	if err := os.MkdirAll(bin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "limactl"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := link(lima.Dir(), lima.Current()); err != nil {
+		t.Fatal(err)
+	}
+	var out strings.Builder
+	path, err := lima.EnsureInstalled(&out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path != lima.Binary() {
+		t.Fatalf("got %q", path)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("it said something while doing nothing: %q", out.String())
+	}
+}
+
+// Two commands starting at once must not both download it.
+func TestConcurrentEnsureInstallsOnce(t *testing.T) {
+	root := t.TempDir()
+	if !Supported() {
+		t.Skip("no lima build for this platform")
+	}
+	body := tarball(t, map[string]string{"bin/limactl": "#!/bin/sh\n"})
+	sum := sumOf(body)
+	withPinned(t, sum)
+	server := fakeRelease(t, body, fmt.Sprintf("%s  %s\n", sum, limaAsset[runtime.GOARCH]))
+	defer server.Close()
+
+	var mu sync.Mutex
+	downloads := 0
+	var wg sync.WaitGroup
+	for range 4 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var out strings.Builder
+			lima := Lima{Root: root, BaseURL: server.URL}
+			if _, err := lima.EnsureInstalled(&out); err != nil {
+				t.Error(err)
+				return
+			}
+			if strings.Contains(out.String(), "downloading") {
+				mu.Lock()
+				downloads++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if downloads != 1 {
+		t.Fatalf("%d of 4 concurrent callers downloaded it; the lock is not holding", downloads)
 	}
 }

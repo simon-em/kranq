@@ -77,8 +77,10 @@ usage returns. Rotating the token opens the gate immediately.
 ```sh
 brew tap effetmonstre/tap git@bitbucket.org:effetmonstre/homebrew-tap.git
 brew install forge
-forge install --deps-only        # forge fetches and verifies its own lima
 ```
+
+That is all of it: lima is fetched and verified the first time a command needs a
+VM.
 
 See [homebrew.md](docs/homebrew.md). Or from a binary you already have:
 
