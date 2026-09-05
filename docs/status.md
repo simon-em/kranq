@@ -1,126 +1,88 @@
-# Status
+# Where things stand
 
 ## Done
 
-**Phase 0: the pure core.** New repo, `main.go`, a command table in `internal/cli`.
-`internal/task` carried over from ci-runner verbatim, schema and script generation both.
-Verified by rendering `infrastructure/ci/tasks/maintenance.yaml` through both the old
-`ci-task-validate --script` and `forge render` and diffing: byte-identical, 529 lines.
+**Phase 0, the pure core.** The command table, and `internal/task` carried over
+from ci-runner verbatim. Verified by rendering `maintenance.yaml` through both
+the old `ci-task-validate --script` and `forge render` and diffing: byte
+identical, 529 lines.
 
-**Phase 1: one real job, no daemon.** `internal/project`, `internal/image`, `internal/vm`,
-`internal/run`, `internal/sshagent`, `internal/sockpath`. `forge run --local` checks out the
-repo, builds or reuses both image layers, clones a VM, runs the compiled task, pulls
-artifacts, destroys the VM.
+**Phase 1, one real job.** `forge run --local` checks out the repo, builds or
+reuses both image layers, clones a VM, runs the task, pulls artifacts, destroys
+the VM. Base image 153s, dx's project layer 289s, a job against the warm image
+17s.
 
-Measured on a 16 GiB M-series Mac with Lima 2.2.0:
+**Phase 2, the daemon.** `internal/state`, `svc.Prepare`, `sched`, `gate`, `ipc`,
+and the daemon behind a unix socket. `forge run` submits and follows by default;
+`--local` stays as break-glass so that path is exercised rather than dead.
 
-| Step | Time |
+Re-adoption is done: each job runs as `forge exec <id>` in its own process group
+and records its outcome, so a daemon restart no longer costs the run.
+
+**Phase 3, the fence and operations.** `spec.effects`, `internal/fence`, the
+in-VM `forge_push` and its guard hook, `forge fence ls|show|break`. The
+env-derived checkout credential. `forge install|upgrade|rollback|doctor|config`,
+`forge vm shell|keep|rm`, and `forge peer`, which retires `deploy.sh`.
+
+**The push endpoint** (a reshaped phase 6). Source arrives by `git push` over
+https or ssh, push options carry the task and the forwarded env, and the run
+streams back to the pushing terminal. Named tokens for https, forced-command ssh
+keys for ssh. See [push.md](push.md).
+
+## Verified on real hardware
+
+Not merely tested. These were run against actual machines.
+
+| | Where |
 | --- | --- |
-| base image build | 153s |
-| dx project layer (Ruby, Node, Playwright browsers) | 289s |
-| a job against the warm image | 17s |
+| a real dx job, clone from Bitbucket, VM, docker | the mac mini |
+| the fence, all six cases including both release policies | this laptop, real VM |
+| re-adoption through a SIGKILLed daemon | both |
+| re-adoption through a *failed upgrade*, by accident | the mac mini |
+| a result recorded while no daemon was running at all | this laptop |
+| cancel tearing down the process group and its VM | this laptop |
+| `forge push` over https, code that exists in no git repo | this laptop |
+| `forge push` over ssh, likewise | the mac mini |
+| a plain `git push` doing the same, three ways | the mac mini |
+| a forced-command key getting no shell and reading no files | the mac mini |
+| `forge install` with no `limactl` on PATH at all | this laptop |
+| `peer upgrade` installing forge from nothing | the mac mini |
 
-The 17s figure is the one that matters: `limactl clone` is an APFS copy-on-write clone, so a
-warm image costs almost nothing to start from.
+## The mac mini, as it stands
 
-**Phase 3: install, VM inspection, and the fence.** `forge install` fetches and
-verifies its own Lima and writes the launchd job; `forge auth claude` stores the token
-in `$FORGE_HOME/env` at 0600. `--keep-vm` plus `forge vm ls|shell|rm` open a failed
-run for inspection. The env-derived checkout credential is in `run.Remote`, so a
-forwarded `BITBUCKET_TOKEN` produces an https clone and no forwarded agent is needed.
+forge is installed at `~/.local/bin/forge`, state in `~/.forge`, VMs in
+`~/.forge/lima`, `FORGE_MAX_VMS=1`. `forge doctor` is green except for the Claude
+token, which is not set.
 
-The fence landed with `spec.effects`, `internal/fence`, the in-VM `forge_push` helper
-and its guard hook, and `forge fence ls|show|break`. Two of the plan's assumptions
-about git were wrong and are recorded in [fence.md](fence.md).
+**ci-runner is untouched and still running.** The two share nothing: different
+binaries, different homes, different lima homes, different VM name prefixes.
 
-Still open in phase 3: `forge upgrade|rollback|doctor|deps`, and `forge peer upgrade`
-replacing `deploy.sh`.
+## Left to do
 
-## Phase 2, in progress
+**Cutover.** Convert dx's `spec.sh` and `playwright.sh` to YAML specs in their
+own commit, land the submodule and dx commits, watch a week, then delete the old
+clients. This is the step that makes any of it matter day to day.
 
-Done so far: `internal/state`, `internal/gate`, `internal/svc.Prepare`, `internal/hostres`,
-`internal/sched`. The scheduler carries the `running -> lost` rule, so **the duplicate-PR bug
-described below is fixed**, with a test that fails if ci-runner's requeue behaviour is
-reintroduced.
+**Two external facts.** Whether Bitbucket accepts writes to `refs/forge/*`, which
+the fence needs; and whether a first push of dx fits under Cloudflare's request
+body cap, which only matters for the https path since ssh has no such limit.
 
-Done since: `internal/ipc`, `internal/daemon`, and the CLI for all of it. `forge run` submits
-to the daemon by default, follows the log, pulls artifacts and exits with the task's own code;
-`--local` remains as a break-glass path that bypasses the queue. `forge ps|logs|cancel|status`
-and `forge daemon run|start|stop|status` exist. The daemon autostarts on first use.
+**Peer dispatch.** Peers can be managed but work is not distributed to them. Note
+that peers add no Claude capacity, since the subscription is shared: they buy
+parallel spec and playwright runs.
 
-Validated on this Mac end to end: autostart, submit, queue, follow, artifacts back over the
-socket, correct exit code, 20s against a warm image.
+**CLI conveniences** the plan listed and that do not exist: `inspect`, `attach`,
+`wait`, `rerun`, `daemon restart|logs`, `audit`.
 
-Re-adoption is done. Each job runs as `forge exec <id>` in its own process group
-and records its outcome in `result.json`, so a daemon SIGKILL no longer costs the
-run. Verified on real hardware: the daemon was killed mid-job, the job kept going
-and its VM stayed up, the restarted daemon re-adopted it as attempt 1 and reported
-the real exit code. A job that finished while no daemon was running at all was
-picked up from its record on the next start instead of being marked lost.
+## Risks worth keeping in view
 
-Re-adoption is deliberately last of those. Marking a restarted task `lost` is already correct
-and safe; re-adoption only makes it *cheaper*, by not throwing away a 45-minute run. It needs
-the job to outlive the daemon, which means an exec shim recording pgid and start time, so it
-is a real chunk of work rather than a tweak.
+**forge has no git remote.** It exists only on one laptop and is now larger than
+the system it replaces. `ci-runner` has the same problem *and* is what currently
+runs CI.
 
-### Original plan for the remaining pieces
+**`ci-runner` is still at `CI_MAX_VMS=2`** while forge is at 1. Three VMs at
+~3GiB on a 16GiB machine is tight. forge only runs when asked, so nothing runs
+away on its own, but the plan calls for dropping both to 1 during the overlap.
 
-1. `internal/state` — the task store. Same on-disk layout as ci-runner's
-   (`$FORGE_HOME/tasks/<id>/{task.json,log,artifacts/}`) but single-writer with an in-memory
-   index, a per-write random temp name, and `f.Sync()` before rename. Drop `AppendLog` and the
-   dead `seen` field. Secrets go in a separate `secrets.json` so a diagnostic dump cannot
-   include them.
-2. `internal/svc` — the domain API that does not exist in ci-runner. In particular a **pure**
-   `Prepare(req, caps, now, id) (Task, error)` holding the repo/branch precedence and the
-   Claude precondition, all of which is currently trapped inside an HTTP handler.
-3. `internal/sched` — the scheduler. Port ci-runner's `queue.go` policy (creation order, head
-   of line blocking on memory, skip-forward on a closed gate) and add: a wake channel so
-   submit does not wait up to 5s for the next tick, CPU accounting, named stop reasons.
-4. `internal/ipc` — `net/http` over a unix socket. Nothing binds a network interface, so
-   authorization is file permissions and the bearer token disappears.
-5. `forge daemon run|start|stop|status`, and `forge run` defaulting to submit-and-follow with
-   `--local` kept as a supported break-glass path.
-
-## The correctness fixes that belong to phase 2
-
-These are the reason phase 2 is not merely "add a queue".
-
-**The duplicate-PR bug that exists in the running system today.** ci-runner's
-`Scheduler.recover()` requeues any task found `running` at startup. The job's process group is
-spawned with `Setpgid: true`, so a SIGKILL of the daemon orphans it rather than killing it,
-and `launchctl kickstart -k` SIGKILLs. So the VM keeps running, the job pushes its branch and
-opens its pull request, and the restarted daemon runs the whole task again. It is currently
-masked only by `deploy.sh` refusing to restart while work is in flight.
-
-forge must instead: re-adopt a task whose process group and VM are both still alive, and mark
-`lost` one whose executor is gone. **There must be no code path anywhere that transitions
-`running -> queued` or `lost -> queued`.** Re-running a lost task is a new task id created by
-an explicit human command.
-
-**`retry_after` outliving the Claude gate.** A task's `retry_after`, written when the token
-was exhausted, survives a token rotation, so tasks sit idle for up to 40 minutes with the gate
-wide open. This bit us twice in one afternoon. Delete the field: replace it with
-`BlockedOn string` and have the scheduler consult the live gate every tick.
-
-**The Claude gate is not persisted** and is keyed to nothing, so a restart silently reopens a
-genuinely closed gate. Persist it, keyed by a hash of the OAuth token, so a rotated token gets
-a fresh gate for free.
-
-**Artifacts collide.** ci-runner writes them to a path shared by every run of the same
-repo/label/branch and `rm -rf`s it at the start, so two concurrent runs of one branch stomp
-each other. forge already copies straight into the task directory.
-
-**`resources.Fits` fails open.** It returns true when the memory probe fails. Harmless on one
-machine, but in a cluster a node with a broken `vm_stat` reports infinite free memory and wins
-every placement bid. Must fail closed.
-
-## Later phases
-
-3. The fence (`refs/forge/fence/*`), the env-derived checkout credential, self-install,
-   launchd, `forge vm shell|keep`, `forge peer upgrade`.
-4. Cutover: convert dx's two shell tasks to specs, switch the pipeline, retire ci-runner.
-5. Peers over ssh exec.
-6. The HTTP API behind a Cloudflare tunnel, with named API tokens and no stored credentials.
-
-Phases 5 and 6 are each comparable in size to 0-4 combined, are independent of each other, and
-can be dropped without stranding anything.
+**forge cannot stop a partitioned machine from running a job.** It can only stop
+the *effect* landing twice. This is a property of the world, not a gap to close.

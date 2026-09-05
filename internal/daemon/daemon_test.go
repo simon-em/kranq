@@ -78,17 +78,19 @@ func daemonWith(t *testing.T, exec *stubExec) (*ipc.Client, *Daemon, context.Can
 	done := make(chan error, 1)
 	go func() { done <- d.Run(ctx) }()
 	t.Cleanup(func() {
-		// Shutdown deliberately leaves jobs running, so a stub blocked forever
-		// would still be writing into the temp directory while it is removed.
-		exec.release()
+		// Order matters. Cancelling first stops the scheduler launching
+		// anything else, so the count below cannot dip to zero between one job
+		// finishing and the next queued one starting. Only then are held jobs
+		// released, because shutdown deliberately leaves them running and a
+		// stub blocked forever would still be writing into the temp directory
+		// while it is removed.
 		cancel()
 		select {
 		case <-done:
 		case <-time.After(5 * time.Second):
 			t.Error("the daemon did not shut down")
 		}
-		// The daemon no longer waits for jobs, so a released one may still be
-		// finishing its bookkeeping while TempDir removes the directory.
+		exec.release()
 		deadline := time.Now().Add(5 * time.Second)
 		for d.sched.RunningCount() > 0 && time.Now().Before(deadline) {
 			time.Sleep(10 * time.Millisecond)

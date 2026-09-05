@@ -1,88 +1,148 @@
 # forge
 
-One binary that runs CI jobs in disposable [Lima](https://lima-vm.io) VMs on a macOS build
-machine. It installs itself, installs its own dependencies, keeps state in a local daemon,
-reaches other build machines over ssh without opening a port anywhere, and exposes all of it
-through a CLI.
+One binary that runs CI jobs in disposable [Lima](https://lima-vm.io) VMs on a
+macOS build machine. It installs itself, installs its own dependencies, keeps
+state in a local daemon, receives work over ssh or a git push, and exposes all of
+it through a CLI.
 
-It replaces `ci-runner` plus the two bash clients in `infrastructure/ci/`.
-
-## Status
-
-It runs real jobs. There is no daemon or queue yet, so a run happens in the foreground of the
-CLI process. See [docs/status.md](docs/status.md).
+It replaces `ci-runner` and the two bash clients in `infrastructure/ci/`.
 
 ```sh
-forge run <spec.yaml> --repo dx --branch ci/lima --artifacts ./out
-forge image ls|build|prune
-forge validate|render|version
+forge install                                    # binary, PATH, lima, launchd
+forge run ci/tasks/spec.yaml --repo dx --branch main
+forge push ci/tasks/spec.yaml --repo dx          # send this repo, run it there
+forge doctor                                     # is this machine able to run jobs
 ```
 
-Measured on a 16 GiB M-series Mac: a base image builds in 153s, dx's project layer in 289s,
-and a job against the warm image runs in 17s, because `limactl clone` is a copy-on-write
-clone.
+**[Every command](docs/commands.md)** · [Writing a task](docs/tasks.md) ·
+[Push instead of clone](docs/push.md) · [At-most-once effects](docs/fence.md) ·
+[Operating it](docs/operations.md) · [Where things stand](docs/status.md)
+
+## Why a VM per job
+
+Concurrent CI jobs on one machine collide on ports, Compose project names and
+working trees. The usual fix is to allocate all three per job, which is fiddly
+and has to be redone for every project.
+
+A VM has its own network namespace, so none of it is shared. Each job uses
+whatever ports the project normally uses, `docker compose up` works unmodified,
+and two jobs cannot see each other. Cloning is nearly free: `limactl clone` is an
+APFS copy-on-write clone.
+
+Measured on a 16 GiB M-series Mac: the shared base image builds in 153s, dx's
+project layer in 289s, and a job against a warm image runs in about 20s.
+
+## Two ways to get work to it
+
+**Clone.** The VM fetches the repository from the git host, using a forwarded
+token or ssh agent. This is what a pipeline that already has credentials does.
+
+**Push.** You send the code to forge and it already has it:
+
+```sh
+git remote add forge ssh://macmini@buildhost:333/dx.git
+git push forge main -o task=ci/tasks/spec.yaml
+```
+
+The build log streams back to your terminal as it runs. Nothing is cloned, so
+nothing needs a credential to read the code, and a commit that exists nowhere
+else still runs. See [push.md](docs/push.md).
+
+## What it guarantees
+
+**A job outlives its daemon.** Each job runs as its own process group and records
+its result in the task directory. Kill the daemon mid-run and the job keeps
+going; the daemon that comes back re-adopts it and reports what happened.
+
+**A lost job never silently runs twice.** There is no path from `running` back to
+`queued`. A task whose executor is gone becomes `lost`, and re-running it is a
+human decision under a new task id.
+
+**An effect lands at most once.** A task declaring `effects.push` holds a fence
+at the git host, and its branch push is atomic with advancing that fence, so a
+partitioned attempt cannot open a second pull request. What that does and does
+not cover is set out in [fence.md](docs/fence.md).
+
+**Claude usage exhaustion is not a failure.** The task is held and resumes when
+usage returns. Rotating the token opens the gate immediately.
+
+## Install
+
+```sh
+curl -fsSL <the binary> -o forge && chmod +x forge
+./forge install --with-daemon
+forge auth claude --stdin < token.txt
+forge doctor
+```
+
+`install` verifies Lima against a checksum compiled into the binary *and* the
+published `SHA256SUMS`, which must agree, then keeps it under `$FORGE_HOME/deps`
+and calls it by absolute path. A Homebrew lima appearing or disappearing cannot
+change what runs.
+
+To set up another build machine from your laptop:
+
+```sh
+forge peer add mini-1 --ssh macmini@buildhost:333 --default
+forge peer upgrade mini-1
+forge peer test mini-1
+```
 
 ## Layout
 
 ```
-main.go                  os.Exit(cli.Main(os.Args))
-assets/                  lima.yaml + mcp/*.py, embedded in the binary
-internal/cli/            subcommand dispatch and terminal output
-internal/task/           the task schema, and compiling a spec to one bash script
-internal/project/        ci/setup.yaml and ci/basekey.txt
-internal/image/          content-addressed naming, the two-layer cache, build, prune
-internal/vm/             the limactl driver, behind an interface with a fake
-internal/run/            one job end to end
-internal/sshagent/       ssh agent handling, when no token was forwarded
-internal/sockpath/       the macOS 104-byte unix socket limit
-internal/exitcode/       the exit code contract
+main.go              os.Exit(cli.Main(os.Args))
+assets/              lima.yaml + mcp/*.py, embedded in the binary
+
+internal/cli/        subcommand dispatch and terminal output
+internal/task/       the task schema, and compiling a spec to one bash script
+internal/svc/        the pure domain API every entry point goes through
+internal/state/      the task store
+internal/sched/      admission, re-adoption, the lost-task rule
+internal/daemon/     the daemon, the job supervisor, the git endpoint
+internal/jobproc/    the handover between a job process and the daemon
+internal/ipc/        http over a unix socket
+internal/run/        one job end to end, including the pushed-source path
+internal/project/    ci/setup.yaml and ci/basekey.txt
+internal/image/      content-addressed naming, the two-layer cache, build, prune
+internal/vm/         the limactl driver, behind an interface with a fake
+internal/gitsrv/     receiving a git push over http and over ssh
+internal/authkeys/   forced-command entries in ~/.ssh/authorized_keys
+internal/token/      named tokens, stored only as hashes
+internal/fence/      at-most-once effects, as a compare-and-swap at the git host
+internal/gate/       the Claude usage gate, persisted and keyed by token
+internal/peer/       other build machines
+internal/upgrade/    replacing the binary, and going back
+internal/selfinstall/ install, PATH, launchd
+internal/deps/       fetching and verifying lima
+internal/doctor/     the checks, as pure functions
+internal/hostres/    memory, cpu and disk probes
+internal/sockpath/   the macOS 104-byte unix socket limit
+internal/exitcode/   the exit code contract
 ```
 
-## Two image layers
+About 9,900 lines of Go and 354 tests. `gopkg.in/yaml.v3` is the only dependency.
 
-The **base** is the same for every project: Debian 13, Docker, libvips, overmind, the Claude
-CLI. It is rebuilt when `assets/lima.yaml` changes or when it is older than the TTL, which is
-folded into the image name so an expiry invalidates everything built on it.
+## Testing
 
-The **project layer** is the repo's `ci/setup.yaml` run once on a clone of the base. This is
-where language versions live, because that is what actually differs between projects. It is
-keyed by the base name, the setup script, and every file listed in `ci/basekey.txt`, so
-changing a lockfile rebuilds just that layer and changing nothing costs nothing.
+`go test ./...` needs no VM and no network. The `limactl` surface sits behind an
+interface a fake satisfies, the fence and the git endpoint run against real local
+bare repositories, and the ssh path is driven by a fake `ssh` on PATH.
 
-## The exit code contract
+What that cannot cover is run against real hardware, and
+[status.md](docs/status.md) records which of those have actually been done.
 
-A caller has to be able to tell an infrastructure failure from a test failure, which the
-system this replaces could not do: it exited 1 for both. So 64 to 127 are reserved for forge
-and a task's own exit code passes through below that.
+## Things that will bite you
 
-| Code | Meaning |
-| --- | --- |
-| 0 | the task reached a passing terminal status |
-| 1-63 | the task's own exit code, verbatim |
-| 64 | usage error |
-| 65 | the spec is invalid |
-| 66 | an input file does not exist |
-| 69 | the peer or daemon is unreachable |
-| 75 | the task was never admitted before its queue deadline |
-| 77 | authentication or scope denied |
-| 124 / 125 | timed out / cancelled |
-| 126 / 127 | could not start / a dependency is missing |
+**macOS caps a unix socket path at 104 bytes.** This has cost time three
+separate ways: the ssh-agent socket, the daemon socket, and Lima instance names.
+`doctor` checks it.
 
-A task exit code that would collide with the reserved band is reported as 1, with the true
-value carried in the result record.
+**Non-login ssh on macOS gets a minimal PATH.** Nothing forge runs on a peer
+relies on PATH; everything uses an absolute path.
 
-Stdout is data, stderr is narration. Every command follows this, so output can be piped.
+**An unforced `git push` is not a compare-and-swap.** It accepts any
+fast-forward, and accepts a create unconditionally. Fence updates use
+`--force-with-lease` with an exact expected object. See [fence.md](docs/fence.md).
 
-## One property worth not breaking
-
-A spec's steps compile into **one** bash script, so an `export` in step 1 is visible in step
-3. Real tasks depend on this: `maintenance.yaml` sets `PR_BRANCH` in its first step and reads
-it in its last. `internal/task` has a test asserting it, so a refactor that isolates steps
-fails loudly rather than in production.
-
-## Build
-
-```sh
-go test ./...
-go build -ldflags "-X github.com/effetmonstre/forge/internal/cli.Version=$(git describe --tags --always)" -o forge .
-```
+More of these, with what they cost to discover, are in `CLAUDE.md`.
