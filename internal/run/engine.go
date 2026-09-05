@@ -60,6 +60,7 @@ type Request struct {
 	RemoteBase  string
 	Keep        KeepPolicy
 	Fence       *FencePlan
+	Source      Source
 }
 
 type Result struct {
@@ -128,8 +129,12 @@ func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res R
 	}
 
 	work := `"$HOME/` + WorkDir + `"`
+	clone := remote.CloneCommand(req.Ref, work)
+	if req.Source.Pushed() {
+		clone = req.Source.CloneCommand(work, remote)
+	}
 	script := fmt.Sprintf("set -euo pipefail\nrm -rf %s\n%s\ncd %s\nexec bash /tmp/forge-task.sh\n",
-		work, remote.CloneCommand(req.Ref, work), work)
+		work, clone, work)
 
 	code, err := e.Driver.Shell(ctx, name, e.exports(req, held)+script, out)
 	if err != nil {
@@ -179,6 +184,11 @@ func (e *Engine) upload(ctx context.Context, name string, req Request) error {
 	}
 	if err := e.Driver.CopyIn(ctx, name, taskPath, "/tmp/forge-task.sh", false); err != nil {
 		return fmt.Errorf("uploading the task script: %w", err)
+	}
+	if req.Source.Pushed() {
+		if err := e.Driver.CopyIn(ctx, name, req.Source.Bare, GuestSource, true); err != nil {
+			return fmt.Errorf("uploading the pushed source: %w", err)
+		}
 	}
 
 	if len(e.Assets) == 0 {

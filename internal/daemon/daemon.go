@@ -32,6 +32,7 @@ type Config struct {
 	ClaudeToken    string
 	GitRemote      string
 	LimaHome       string
+	HTTPAddr       string
 }
 
 func (c Config) SocketPath() string { return sockpath.For(filepath.Join(c.Home, "forge.sock")) }
@@ -100,6 +101,7 @@ func (d *Daemon) Run(ctx context.Context) error {
 	defer os.Remove(d.cfg.SocketPath())
 
 	d.sched.Start(ctx)
+	d.serveGit(ctx)
 	go d.prune(ctx)
 	err = ipc.Serve(ctx, listener, ipc.NewServer(d).Handler())
 	d.drain()
@@ -134,12 +136,13 @@ func (d *Daemon) prune(ctx context.Context) {
 func (d *Daemon) Submit(req ipc.SubmitRequest) (state.Task, error) {
 	snapshot := hostres.Probe()
 	t, err := svc.Prepare(svc.SubmitRequest{
-		SpecYAML: []byte(req.Spec),
-		Repo:     req.Repo,
-		Branch:   req.Branch,
-		Label:    req.Label,
-		Env:      req.Env,
-		Keep:     req.Keep,
+		SpecYAML:     []byte(req.Spec),
+		Repo:         req.Repo,
+		Branch:       req.Branch,
+		Label:        req.Label,
+		Env:          req.Env,
+		Keep:         req.Keep,
+		SourceCommit: req.SourceCommit,
 	}, svc.Capabilities{
 		HasClaudeToken: d.gate.Present(),
 		TotalMemory:    snapshot.TotalBytes,

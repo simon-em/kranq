@@ -27,12 +27,13 @@ type Capabilities struct {
 }
 
 type SubmitRequest struct {
-	SpecYAML []byte
-	Repo     string
-	Branch   string
-	Label    string
-	Env      map[string]string
-	Keep     string
+	SpecYAML     []byte
+	Repo         string
+	Branch       string
+	Label        string
+	Env          map[string]string
+	Keep         string
+	SourceCommit string
 }
 
 func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (state.Task, error) {
@@ -66,21 +67,22 @@ func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (st
 	}
 
 	return state.Task{
-		ID:          id,
-		Name:        spec.Name,
-		Repo:        repo,
-		Branch:      branch,
-		Label:       firstNonEmpty(req.Label, spec.Label, spec.Name),
-		Status:      state.StatusQueued,
-		NeedsClaude: spec.NeedsClaude(),
-		MemoryBytes: memory,
-		CPUs:        spec.Resources.CPUs,
-		SpecYAML:    string(req.SpecYAML),
-		Env:         req.Env,
-		Keep:        req.Keep,
-		FenceKind:   fenceKind(spec),
-		FenceBranch: spec.FenceBranch(branch),
-		CreatedAt:   now,
+		ID:           id,
+		Name:         spec.Name,
+		Repo:         repo,
+		Branch:       branch,
+		Label:        firstNonEmpty(req.Label, spec.Label, spec.Name),
+		Status:       state.StatusQueued,
+		NeedsClaude:  spec.NeedsClaude(),
+		MemoryBytes:  memory,
+		CPUs:         spec.Resources.CPUs,
+		SpecYAML:     string(req.SpecYAML),
+		Env:          req.Env,
+		Keep:         req.Keep,
+		SourceCommit: req.SourceCommit,
+		FenceKind:    fenceKind(spec),
+		FenceBranch:  spec.FenceBranch(branch),
+		CreatedAt:    now,
 	}, nil
 }
 

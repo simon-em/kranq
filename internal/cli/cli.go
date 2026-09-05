@@ -46,6 +46,9 @@ func init() {
 		"rollback":  {"rollback [--force]", "go back to the previous forge binary", runRollback},
 		"peer":      {"peer add|ls|rm|test|upgrade", "manage the other build machines", runPeer},
 		"exec":      {"exec <task-id>", "run one job (started by the daemon, not by hand)", runExec},
+		"token":     {"token create|ls|revoke", "named tokens for the git push endpoint", runToken},
+		"git-hook":  {"git-hook <phase>", "run a receive hook (invoked by git, not by hand)", runGitHook},
+		"push":      {"push <task.yaml> [flags]", "send this repo to forge and run a task against it", runPush},
 		"render":    {"render <task.yaml>", "print the bash script a spec compiles to", runRender},
 		"help":      {"help [command]", "show usage", runHelp},
 	}

@@ -15,6 +15,10 @@ type SubmitRequest struct {
 	Label  string            `json:"label,omitempty"`
 	Env    map[string]string `json:"env,omitempty"`
 	Keep   string            `json:"keep,omitempty"`
+	// Set when the source arrived by git push rather than being cloned from
+	// the git host. The commit is the exact object to build, not a branch tip
+	// that can move while the task waits in the queue.
+	SourceCommit string `json:"source_commit,omitempty"`
 }
 
 type Status struct {

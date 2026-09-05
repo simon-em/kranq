@@ -55,6 +55,7 @@ func runRun(env Env, args []string) int {
 	timeout := fs.Duration("timeout", 4*time.Hour, "ceiling on the run")
 	forward := envFlag{}
 	fs.Var(forward, "env", "NAME=VALUE, or bare NAME to forward it from this environment")
+	fs.Var(forward, "e", "shorthand for -env")
 	positional, err := parsePermuted(fs, args)
 	if err != nil {
 		return exitcode.Usage

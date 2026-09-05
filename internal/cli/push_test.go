@@ -1,0 +1,99 @@
+package cli
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/effetmonstre/forge/internal/exitcode"
+)
+
+func TestPushURL(t *testing.T) {
+	got, err := pushURL("https://ci.example.com", "dx", "forge_abc123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != "https://forge:forge_abc123@ci.example.com/git/dx.git" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestPushURLToleratesTrailingSlashesAndAnExplicitGitPath(t *testing.T) {
+	for _, endpoint := range []string{
+		"https://ci.example.com/",
+		"https://ci.example.com/git",
+		"https://ci.example.com/git/",
+	} {
+		got, err := pushURL(endpoint, "dx", "t")
+		if err != nil {
+			t.Fatalf("%q: %v", endpoint, err)
+		}
+		if !strings.HasSuffix(got, "/git/dx.git") {
+			t.Fatalf("%q -> %q", endpoint, got)
+		}
+		if strings.Contains(got, "//git") || strings.Contains(got, "git/git") {
+			t.Fatalf("%q -> %q", endpoint, got)
+		}
+	}
+}
+
+func TestPushURLRejectsSomethingThatIsNotAURL(t *testing.T) {
+	for _, bad := range []string{"", "ci.example.com", "/not/a/url", "::::"} {
+		if _, err := pushURL(bad, "dx", "t"); err == nil {
+			t.Fatalf("%q was accepted as an endpoint", bad)
+		}
+	}
+}
+
+// The token is the password. It must not end up as a command-line argument,
+// where anything else on the machine can read it out of the process list.
+func TestTheTokenTravelsInTheURLNotAnArgument(t *testing.T) {
+	got, err := pushURL("https://ci.example.com", "dx", "forge_s3cr3t")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "forge_s3cr3t@") {
+		t.Fatalf("the token is not in the userinfo: %q", got)
+	}
+}
+
+// flag.PrintDefaults prints each flag's default value, and usage is printed on
+// every misuse, so a token defaulted from the environment would be echoed into
+// the terminal and into CI logs.
+func TestUsageNeverPrintsTheToken(t *testing.T) {
+	t.Setenv("FORGE_TOKEN", "forge_s3cr3tvalue")
+	t.Setenv("FORGE_ENDPOINT", "https://ci.example.com")
+	_, out, errb := invoke(t, "push")
+	if strings.Contains(out+errb, "forge_s3cr3tvalue") {
+		t.Fatalf("the token was printed:\n%s%s", out, errb)
+	}
+}
+
+func TestEnvShorthandIsAccepted(t *testing.T) {
+	t.Setenv("FORGE_TOKEN", "")
+	code, _, errb := invoke(t, "push", "spec.yaml", "-e", "FOO=bar", "--repo", "dx")
+	// It must fail for the missing endpoint, not for an unknown flag.
+	if strings.Contains(errb, "flag provided but not defined") {
+		t.Fatalf("-e was not accepted: %s", errb)
+	}
+	if code == exitcode.OK {
+		t.Fatal("a push with no endpoint succeeded")
+	}
+}
+
+// A rejected token is the pipeline's configuration; a rejected spec is the code
+// being pushed. A CI step should be able to tell them apart from the exit code.
+func TestRefusalCodeTellsAuthFromEverythingElse(t *testing.T) {
+	cases := map[string]int{
+		"fatal: Authentication failed for 'https://ci/git/dx.git'":  exitcode.Unauthorized,
+		"remote: a forge token is required":                         exitcode.Unauthorized,
+		"fatal: could not resolve host: ci.example.com":             exitcode.Unreachable,
+		"fatal: unable to access: Failed to connect to ci port 443": exitcode.Unreachable,
+		"remote: forge: ci/spec.yaml is not in the pushed commit":   exitcode.InvalidSpec,
+		"": exitcode.InvalidSpec,
+	}
+	for output, want := range cases {
+		if got := refusalCode(output); got != want {
+			t.Fatalf("%q -> %d, want %d", output, got, want)
+		}
+	}
+}

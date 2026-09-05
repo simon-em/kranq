@@ -32,6 +32,7 @@ func daemonConfig() daemon.Config {
 		ClaudeToken:    claudeToken(home),
 		GitRemote:      envOr("FORGE_GIT_REMOTE"),
 		LimaHome:       os.Getenv("FORGE_LIMA_HOME"),
+		HTTPAddr:       os.Getenv("FORGE_HTTP_ADDR"),
 	}
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/effetmonstre/forge/assets"
@@ -69,6 +70,7 @@ func runExec(env Env, args []string) int {
 		FenceDir:     cfg.Home + "/fence",
 		Node:         nodeName(),
 		ArtifactsDir: func(string) string { return store.ArtifactsDir(id) },
+		SourceRepos:  filepath.Join(cfg.Home, "repos"),
 	}
 
 	res := runner.Run(ctx, t, string(script), os.Stdout)

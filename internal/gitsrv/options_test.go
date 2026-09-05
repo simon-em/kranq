@@ -92,3 +92,39 @@ func TestRedactKeepsNamesAndDropsValues(t *testing.T) {
 		}
 	}
 }
+
+func TestParseResult(t *testing.T) {
+	out := `remote: forge: task 20260904T150405-abc succeeded (exit 0)
+remote: ` + ResultMarker + ` id=20260904T150405-abc status=failed exit=7
+To http://127.0.0.1:8420/git/dx.git
+`
+	res := ParseResult(out)
+	if !res.Found {
+		t.Fatal("the result line was not seen")
+	}
+	if res.ID != "20260904T150405-abc" || res.Status != "failed" || res.ExitCode != 7 {
+		t.Fatalf("%+v", res)
+	}
+}
+
+// Without a result line the caller must not assume success: the run may still
+// be going, or the connection may have dropped.
+func TestParseResultReportsAbsence(t *testing.T) {
+	for _, out := range []string{"", "remote: forge: task queued\nTo http://x\n", "FORGE-RESULTS id=x"} {
+		if ParseResult(out).Found && !strings.Contains(out, ResultMarker+" ") {
+			t.Fatalf("a result was invented from %q", out)
+		}
+	}
+	if ParseResult("no marker here").Found {
+		t.Fatal("a result was found in output that has none")
+	}
+}
+
+func TestTheLastResultLineWins(t *testing.T) {
+	out := ResultMarker + " id=a status=succeeded exit=0\n" +
+		ResultMarker + " id=b status=failed exit=3\n"
+	res := ParseResult(out)
+	if res.ID != "b" || res.ExitCode != 3 {
+		t.Fatalf("%+v", res)
+	}
+}

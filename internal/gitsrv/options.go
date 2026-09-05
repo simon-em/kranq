@@ -3,6 +3,7 @@ package gitsrv
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -76,4 +77,46 @@ func Redact(options []string) []string {
 		out = append(out, redact(opt))
 	}
 	return out
+}
+
+// A push's exit status only says whether the push was accepted, never what the
+// run did, because post-receive runs after the ref has already moved. The hook
+// prints this line instead and the client exits on it.
+const ResultMarker = "FORGE-RESULT"
+
+type Result struct {
+	ID       string
+	Status   string
+	ExitCode int
+	Found    bool
+}
+
+func ParseResult(output string) Result {
+	var res Result
+	for _, line := range strings.Split(output, "\n") {
+		// The trailing space matters: without it FORGE-RESULTS, or any longer
+		// word starting the same way, would be read as a result line.
+		idx := strings.Index(line, ResultMarker+" ")
+		if idx < 0 {
+			continue
+		}
+		res = Result{Found: true}
+		for _, field := range strings.Fields(line[idx+len(ResultMarker):]) {
+			key, value, ok := strings.Cut(field, "=")
+			if !ok {
+				continue
+			}
+			switch key {
+			case "id":
+				res.ID = value
+			case "status":
+				res.Status = value
+			case "exit":
+				if n, err := strconv.Atoi(value); err == nil {
+					res.ExitCode = n
+				}
+			}
+		}
+	}
+	return res
 }
