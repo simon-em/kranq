@@ -109,3 +109,63 @@ export FORGE_ENDPOINT=https://ci.example.com
 export FORGE_TOKEN=$FORGE_TOKEN
 forge push ci/tasks/spec.yaml --repo dx
 ```
+
+## Over ssh, which is what a build machine already has
+
+An https endpoint needs a tunnel, and a tunnel puts a request body limit in the
+way of the first push of a large repository. If you can already ssh to the
+machine, none of that is necessary.
+
+```sh
+forge key add ci-laptop ~/.ssh/forge_push.pub          # on the build machine
+FORGE_ENDPOINT=ssh://macmini@host:333 \
+FORGE_SSH_KEY=~/.ssh/forge_push \
+  forge push ci/tasks/spec.yaml --repo dx
+```
+
+No token, no tunnel, no body limit. The key is the credential.
+
+### No new user is needed
+
+Dokku gives itself a `dokku` account. On macOS creating one needs `dscl` and an
+admin password, and it buys nothing here: a **forced command** already confines
+a key to one program.
+
+```
+restrict,command="/Users/macmini/.local/bin/forge git-receive --name ci-laptop" ssh-ed25519 AAAA... forge-key:ci-laptop
+```
+
+`restrict` turns off agent forwarding, port forwarding, pty and X11 in one word;
+a git push needs none of them. `command=` replaces whatever the client asked for
+and puts the original in `SSH_ORIGINAL_COMMAND`.
+
+Verified on the real build machine, with that key:
+
+```
+$ ssh -i forge_push macmini@host whoami
+forge: "whoami" is not a git command
+$ ssh -i forge_push macmini@host 'cat ~/.ssh/id_ed25519'
+forge: "cat" is not allowed; this key may only push and fetch
+```
+
+The ordinary key on the same account still gets a shell. `forge key add` only
+ever appends and `forge key rm` only removes lines carrying its own marker,
+because that file is usually how someone administers the machine and losing a
+line locks them out.
+
+### Parsing SSH_ORIGINAL_COMMAND is the whole boundary
+
+Everything that gets past it runs as the forge user. It accepts
+`git-receive-pack` and `git-upload-pack` with a single quoted path, unquoted the
+way git quotes it, and refuses everything else rather than sanitising anything.
+
+One case worth naming: an ssh path is the repository and nothing else, unlike an
+http path where the repository is only the first segment. Taking the first
+segment there would have let `/etc/../dx.git` quietly mean a repository called
+`etc`. A path with an interior slash is refused.
+
+### Pinning the identity matters
+
+The push key sits beside an ordinary key for the same host, and ssh offers keys
+in its own order, so without `IdentitiesOnly=yes` it presents the ordinary one
+and the forced command never runs. `--ssh-key` sets that up.

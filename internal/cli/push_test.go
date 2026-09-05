@@ -89,6 +89,11 @@ func TestRefusalCodeTellsAuthFromEverythingElse(t *testing.T) {
 		"fatal: could not resolve host: ci.example.com":             exitcode.Unreachable,
 		"fatal: unable to access: Failed to connect to ci port 443": exitcode.Unreachable,
 		"remote: forge: ci/spec.yaml is not in the pushed commit":   exitcode.InvalidSpec,
+		// What ssh actually says when the key is not installed: it never uses
+		// the word "authentication", so matching on that alone missed it.
+		"macmini@host: Permission denied (publickey).":                  exitcode.Unauthorized,
+		"fatal: Could not read from remote repository.":                 exitcode.Unauthorized,
+		`forge: "cat" is not allowed; this key may only push and fetch`: exitcode.Unauthorized,
 		"": exitcode.InvalidSpec,
 	}
 	for output, want := range cases {
@@ -122,5 +127,24 @@ func TestPushURLOverSSH(t *testing.T) {
 func TestAnHTTPEndpointStillNeedsAToken(t *testing.T) {
 	if _, err := pushURL("https://ci.example.com", "dx", ""); err == nil {
 		t.Fatal("an http endpoint was accepted with no token")
+	}
+}
+
+// The push key is a forced-command key that can do nothing but push, and it
+// sits beside an ordinary key for the same host. Without IdentitiesOnly, ssh
+// offers the ordinary key first and the forced command never runs.
+func TestSSHCommandPinsTheIdentity(t *testing.T) {
+	got := sshCommand("/Users/x/.ssh/forge_push")
+	for _, want := range []string{"-i '/Users/x/.ssh/forge_push'", "IdentitiesOnly=yes", "IdentityAgent=none"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("%q missing from %q", want, got)
+		}
+	}
+}
+
+func TestSSHCommandQuotesAPathWithSpaces(t *testing.T) {
+	got := sshCommand("/Users/some one/.ssh/k")
+	if !strings.Contains(got, `'/Users/some one/.ssh/k'`) {
+		t.Fatalf("a path with a space was not quoted: %q", got)
 	}
 }

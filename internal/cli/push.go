@@ -30,6 +30,7 @@ func runPush(env Env, args []string) int {
 	label := fs.String("label", "", "label for the VM and artifacts")
 	keep := fs.String("keep-vm", "", "keep the job VM: never, on-failure, always")
 	rev := fs.String("rev", "HEAD", "what to send")
+	sshKey := fs.String("ssh-key", envOr("FORGE_SSH_KEY"), "identity to push with, for an ssh:// endpoint")
 	detach := fs.Bool("detach", false, "queue it and return without following")
 	forward := envFlag{}
 	fs.Var(forward, "env", "NAME=VALUE, or bare NAME to forward it from this environment")
@@ -93,6 +94,9 @@ func runPush(env Env, args []string) int {
 	cmd.Stdout = io.MultiWriter(env.Stderr, &captured)
 	cmd.Stderr = cmd.Stdout
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if *sshKey != "" {
+		cmd.Env = append(cmd.Env, "GIT_SSH_COMMAND="+sshCommand(*sshKey))
+	}
 	runErr := cmd.Run()
 
 	result := gitsrv.ParseResult(captured.String())
@@ -113,7 +117,13 @@ func runPush(env Env, args []string) int {
 
 func refusalCode(output string) int {
 	lower := strings.ToLower(output)
-	for _, marker := range []string{"authentication failed", "a forge token is required", "401"} {
+	for _, marker := range []string{
+		// http
+		"authentication failed", "a forge token is required", "401",
+		// ssh
+		"permission denied (publickey)", "could not read from remote repository",
+		"this key may only push and fetch", "it has no shell",
+	} {
 		if strings.Contains(lower, marker) {
 			return exitcode.Unauthorized
 		}
@@ -152,3 +162,11 @@ func pushURL(endpoint, repo, secret string) (string, error) {
 }
 
 func isSSH(endpoint string) bool { return strings.HasPrefix(endpoint, "ssh://") }
+
+// IdentitiesOnly matters: the push key is a forced-command key that can do
+// nothing but push, and it usually sits beside an ordinary key for the same
+// host. Without this, ssh offers the ordinary one first and the forced command
+// never runs.
+func sshCommand(key string) string {
+	return fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o IdentityAgent=none", shellQuote(key))
+}
