@@ -142,6 +142,12 @@ func spawnDaemon() error {
 	if err != nil {
 		return err
 	}
+	return spawnDaemonFrom(self)
+}
+
+// The binary is explicit because an upgrade restarts the daemon from the copy
+// it just installed, which is not necessarily the copy running the command.
+func spawnDaemonFrom(bin string) error {
 	logPath := forgeHome() + "/daemon.log"
 	if err := selfinstall.EnsureHome(forgeHome()); err != nil {
 		return err
@@ -151,7 +157,7 @@ func spawnDaemon() error {
 		return err
 	}
 	defer logFile.Close()
-	cmd := exec.Command(self, "daemon", "run")
+	cmd := exec.Command(bin, "daemon", "run")
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}

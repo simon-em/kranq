@@ -42,6 +42,8 @@ func init() {
 		"vm":        {"vm ls|shell|rm", "inspect or remove job VMs", runVM},
 		"fence":     {"fence ls|show|break", "inspect the at-most-once fences held on a repo", runFence},
 		"doctor":    {"doctor [--json]", "check this machine can run tasks", runDoctor},
+		"upgrade":   {"upgrade <path> [--force]", "replace the installed forge, keeping the previous", runUpgrade},
+		"rollback":  {"rollback [--force]", "go back to the previous forge binary", runRollback},
 		"render":    {"render <task.yaml>", "print the bash script a spec compiles to", runRender},
 		"help":      {"help [command]", "show usage", runHelp},
 	}
