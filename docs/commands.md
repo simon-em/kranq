@@ -7,7 +7,7 @@ Commands marked **internal** are run by git or by the daemon, never by hand.
 
 | | |
 | --- | --- |
-| [Running tasks](#running-tasks) | `run` `push` `ps` `logs` `fetch` `cancel` `validate` `render` |
+| [Running tasks](#running-tasks) | `run` `push` `ps` `logs` `fetch` `result` `cancel` `validate` `render` |
 | [Inspecting a machine](#inspecting-a-machine) | `status` `doctor` `vm` `image` |
 | [The daemon](#the-daemon) | `daemon` `config` `auth` |
 | [Receiving pushes](#receiving-pushes) | `repo` `token` `key` |
@@ -88,6 +88,22 @@ Print a task's log; `-f` follows until it finishes.
 
 Cancel queued or running tasks. A running job is signalled as a **process
 group**, then SIGKILLed if it ignores SIGTERM, so its VM goes with it.
+
+### `kranq result <id> [--wait DURATION]`
+
+```sh
+kranq result 20260906T170711-9ee94
+KRANQ-RESULT id=20260906T170711-9ee94 status=succeeded exit=0
+```
+
+Reprints the line the receive hook prints when a run ends, and exits with the
+task's own code. It waits if the task is still going.
+
+**A run outlives the connection that started it.** If ssh drops mid-push the job
+keeps going on the machine, finishes, and takes its verdict with it — which is
+indistinguishable from a failed build unless you ask again. This is how the push
+client rejoins: it captures the id from `task <id> queued` and asks over a fresh
+connection rather than guessing.
 
 ### `kranq fetch <id> [--out DIR]`
 

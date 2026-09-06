@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/gitsrv"
 	"github.com/simon-em/kranq/internal/ipc"
 	"github.com/simon-em/kranq/internal/state"
 )
@@ -228,5 +229,47 @@ func untarInto(r io.Reader, dest string) (int, error) {
 		}
 		f.Close()
 		count++
+	}
+}
+
+// result reprints the line the receive hook prints when a run finishes. It
+// exists because that line is the only place a push carries an outcome, and a
+// connection that drops mid-run takes it with it: the job keeps going on the
+// machine, finishes, and nobody hears. Asking again over a fresh connection
+// turns a lost verdict back into the real one.
+func runResult(env Env, args []string) int {
+	fs := flag.NewFlagSet("result", flag.ContinueOnError)
+	fs.SetOutput(env.Stderr)
+	wait := fs.Duration("wait", 4*time.Hour, "how long to wait if the task is still running")
+	positional, err := parsePermuted(fs, args)
+	if err != nil {
+		return exitcode.Usage
+	}
+	if len(positional) != 1 {
+		fmt.Fprintln(env.Stderr, "usage: kranq result <id> [--wait DURATION]")
+		return exitcode.Usage
+	}
+	client, code := connect(env, false)
+	if client == nil {
+		return code
+	}
+	ctx := context.Background()
+	deadline := time.Now().Add(*wait)
+	for {
+		t, err := client.Get(ctx, positional[0])
+		if err != nil {
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
+			return codeOf(err, exitcode.Unreachable)
+		}
+		if t.Terminal() {
+			fmt.Fprintf(env.Stdout, "%s id=%s status=%s exit=%d\n",
+				gitsrv.ResultMarker, t.ID, t.Status, t.ExitCode)
+			return exitcode.FromTask(t.ExitCode)
+		}
+		if time.Now().After(deadline) {
+			fmt.Fprintf(env.Stderr, "kranq: %s is still %s after %s\n", t.ID, t.Status, *wait)
+			return exitcode.Unreachable
+		}
+		time.Sleep(2 * time.Second)
 	}
 }

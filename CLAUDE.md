@@ -299,3 +299,11 @@ forever.** That is not a problem to fix: installing by full name is itself the c
 brew records it in `~/.homebrew/trust.json`. Verified by deleting that file and installing
 again with stdin closed — it succeeds. `brew trust --tap simon-em/kranq` trusts the whole
 tap up front if you would rather.
+
+**A run outlives the connection that started it, and the verdict does not.** The outcome
+reaches a pushing client only as the `KRANQ-RESULT` line in the push output, so an ssh drop
+mid-run loses it: the job finishes on the machine and nobody hears. Observed twice against
+the mini, both times with the job succeeding while the client reported failure. The hook
+names the task as soon as it is queued (`task <id> queued from <sha>`), which is what makes
+recovery possible — `kranq result <id>` reprints the line over a fresh connection, and
+`ci/kranq` uses it before deciding a run failed.

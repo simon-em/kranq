@@ -54,6 +54,7 @@ func init() {
 		"git-receive": {"git-receive", "the ssh entry point (run by sshd, not by hand)", runGitReceive},
 		"git-hook":    {"git-hook <phase>", "run a receive hook (invoked by git, not by hand)", runGitHook},
 		"push":        {"push <task.yaml> [flags]", "send this repo to kranq and run a task against it", runPush},
+		"result":      {"result <id> [--wait D]", "reprint a run's outcome, waiting if it is still going", runResult},
 		"render":      {"render <task.yaml>", "print the bash script a spec compiles to", runRender},
 		"help":        {"help [command]", "show usage", runHelp},
 	}
