@@ -255,3 +255,37 @@ func TestConcurrentEnsureInstallsOnce(t *testing.T) {
 		t.Fatalf("%d of 4 concurrent callers downloaded it; the lock is not holding", downloads)
 	}
 }
+
+// Renaming this tool moved ~/.forge to ~/.kranq and broke an absolute `current`
+// symlink: a working lima sat unreachable beside a link pointing at a path that
+// no longer existed. A relative link survives the move.
+func TestTheCurrentLinkSurvivesTheStateDirectoryMoving(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "before")
+	deps := filepath.Join(root, "deps")
+	versioned := filepath.Join(deps, "lima-2.2.0", "bin")
+	if err := os.MkdirAll(versioned, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(versioned, "limactl"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := link(filepath.Join(deps, "lima-2.2.0"), filepath.Join(deps, "current")); err != nil {
+		t.Fatal(err)
+	}
+
+	target, err := os.Readlink(filepath.Join(deps, "current"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if filepath.IsAbs(target) {
+		t.Errorf("current -> %q is absolute, so moving the state directory breaks it", target)
+	}
+
+	moved := filepath.Join(filepath.Dir(root), "after")
+	if err := os.Rename(root, moved); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(moved, "deps", "current", "bin", "limactl")); err != nil {
+		t.Errorf("lima is unreachable after the move: %v", err)
+	}
+}

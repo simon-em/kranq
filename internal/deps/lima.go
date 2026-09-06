@@ -198,7 +198,15 @@ func extract(archive []byte, dest string) error {
 	}
 }
 
+// The link is relative to its own directory, not absolute. An absolute one
+// breaks the moment the state directory moves, and it moves for real: renaming
+// this tool turned ~/.forge into ~/.kranq and left `current` pointing at a path
+// that no longer existed, with a working 50MB lima sitting unreachable beside
+// it. Nothing failed loudly; the next job would just have downloaded it again.
 func link(target, name string) error {
+	if rel, err := filepath.Rel(filepath.Dir(name), target); err == nil {
+		target = rel
+	}
 	tmp := name + ".new"
 	_ = os.Remove(tmp)
 	if err := os.Symlink(target, tmp); err != nil {
