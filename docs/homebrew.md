@@ -44,12 +44,20 @@ and from npm. That was a requirement, not luck: the tool used to be called
 `forge`, and `homebrew/core/forge` is arrayfire's "High Performance
 Visualization" library, so `brew install forge` fetched a graphics library.
 
-`brew install kranq` on a machine that has not tapped this repository still
-fails, because the formula lives here rather than in core. Tap first, or name
-the tap once and let brew add it:
+**The tap step is not optional, and the url is not optional either.** Naming the
+tap in the install alone does not work: brew derives the remote from the name
+and goes looking for `simon-em/homebrew-kranq`, which does not exist.
+
+```
+$ brew install simon-em/kranq/kranq        # without tapping first
+Error: ... git clone https://github.com/simon-em/homebrew-kranq ... exited with 128
+```
+
+So it is always two commands, and the first carries the url:
 
 ```sh
-brew install simon-em/kranq/kranq      # taps and installs in one go
+brew tap simon-em/kranq https://github.com/simon-em/kranq
+brew install simon-em/kranq/kranq
 ```
 
 ## Cutting a release
