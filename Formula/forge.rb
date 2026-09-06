@@ -1,29 +1,20 @@
-# Homebrew formula for forge.
+# Homebrew formula for forge. This repository is its own tap:
 #
-# It builds from source rather than downloading a release, so nothing has to be
-# hosted anywhere and a private repository works with the ssh key you already
-# push with.
+#   brew tap simontlbt/forge https://github.com/simontlbt/forge
+#   brew install simontlbt/forge/forge
 #
-# Copy this into a tap as Formula/forge.rb, set FORGE_REPO below, and tag a
-# release. See docs/homebrew.md.
+# See docs/homebrew.md. To cut a release: tag it, push the tag, then put the
+# tarball's sha256 here and push that. The formula on main always points at the
+# last tag, never at main itself.
 class Forge < Formula
   desc "Runs CI jobs in disposable Lima VMs on a macOS build machine"
-  homepage "https://bitbucket.org/effetmonstre/forge"
+  homepage "https://github.com/simontlbt/forge"
+  url "https://github.com/simontlbt/forge/archive/refs/tags/v0.1.0.tar.gz"
+  sha256 "REPLACE_WITH_TARBALL_SHA256"
+  # No license line: the repository carries no LICENSE file, and naming one here
+  # would assert something untrue. Add a LICENSE and then say so.
 
-  # An ssh url so a private repository needs no token: git uses the key that is
-  # already set up. Switch to https if the repository is public.
-  # revision: must be the COMMIT the tag points at, not the tag object. For an
-  # annotated tag `git rev-parse v0.1.0` gives the tag object and brew refuses
-  # the download with "tag should be X but is actually Y". Use:
-  #   git rev-parse v0.1.0^{commit}
-  url "git@bitbucket.org:effetmonstre/forge.git",
-      using:    :git,
-      tag:      "v0.1.0",
-      revision: "0000000000000000000000000000000000000000"
-  version "0.1.0"
-  license "UNLICENSED"
-
-  head "git@bitbucket.org:effetmonstre/forge.git", using: :git, branch: "main"
+  head "https://github.com/simontlbt/forge.git", branch: "main"
 
   depends_on "go" => :build
   depends_on :macos
