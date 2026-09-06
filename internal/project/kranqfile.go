@@ -18,7 +18,7 @@ type instruction struct {
 // by name beats "unknown instruction", because what someone pasted a Dockerfile
 // in for is usually one of these.
 var refused = map[string]string{
-	"FROM":        "every Forgefile starts from forge's own base image; there is nothing to choose",
+	"FROM":        "every Kranqfile starts from kranq's own base image; there is nothing to choose",
 	"CMD":         "a layer is an environment, not a service; what runs in it is the task",
 	"ENTRYPOINT":  "a layer is an environment, not a service; what runs in it is the task",
 	"EXPOSE":      "the VM publishes no ports to the host at all",
@@ -45,7 +45,7 @@ func parse(src, file string) (Build, error) {
 	}
 	for _, in := range instructions {
 		if why, no := refused[in.verb]; no {
-			return b, fmt.Errorf("%s:%d: %s is not a Forgefile instruction: %s", file, in.line, in.verb, why)
+			return b, fmt.Errorf("%s:%d: %s is not a Kranqfile instruction: %s", file, in.line, in.verb, why)
 		}
 		if err := b.apply(&pending, in, file); err != nil {
 			return b, err

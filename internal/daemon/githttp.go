@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/gitsrv"
-	"github.com/effetmonstre/forge/internal/token"
+	"github.com/simon-em/kranq/internal/gitsrv"
+	"github.com/simon-em/kranq/internal/token"
 )
 
 // The git endpoint is off unless an address is configured, and the address is
@@ -34,7 +34,7 @@ func (d *Daemon) serveGit(ctx context.Context) {
 
 	store := &gitsrv.Store{
 		Root:       d.cfg.ReposDir(),
-		ForgeBin:   self,
+		KranqBin:   self,
 		SocketPath: d.cfg.SocketPath(),
 	}
 	srv := &gitsrv.Server{

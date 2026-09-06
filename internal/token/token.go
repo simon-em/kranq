@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	Prefix     = "forge_"
+	Prefix     = "kranq_"
 	secretSize = 24
 	// Enough to tell two tokens apart in a list without being enough to guess
 	// one from a log line.

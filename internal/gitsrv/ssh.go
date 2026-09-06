@@ -6,9 +6,9 @@ import (
 )
 
 // Over ssh, git runs `git-receive-pack '<path>'` on the far side. A forced
-// command in authorized_keys replaces that with forge, and the original lands
+// command in authorized_keys replaces that with kranq, and the original lands
 // in SSH_ORIGINAL_COMMAND. This is the only thing standing between a key and
-// arbitrary command execution as the forge user, so it refuses anything it does
+// arbitrary command execution as the kranq user, so it refuses anything it does
 // not positively recognise rather than trying to sanitise it.
 type SSHCommand struct {
 	Verb string
@@ -22,9 +22,9 @@ const (
 
 func (c SSHCommand) Writes() bool { return c.Verb == VerbReceive }
 
-// RepoFromPath handles the other way in: `git push --receive-pack="forge
-// git-receive"` makes git run forge directly with the repository as an
-// argument, so no forced command and no forge-specific key is involved at all.
+// RepoFromPath handles the other way in: `git push --receive-pack="kranq
+// git-receive"` makes git run kranq directly with the repository as an
+// argument, so no forced command and no kranq-specific key is involved at all.
 // Whoever can already ssh to the machine can push.
 func RepoFromPath(path string) (string, error) {
 	trimmed := strings.Trim(strings.TrimSpace(path), "/")
@@ -69,11 +69,11 @@ func ParseSSHCommand(original string) (SSHCommand, error) {
 		}
 		verb, rest = "git-"+sub, remainder
 	}
-	// A client may ask for forge itself as the receive-pack. Under a forced
+	// A client may ask for kranq itself as the receive-pack. Under a forced
 	// command that arrives here rather than as an argument, and refusing it
 	// would break the combination of a locked-down key and a client set up for
 	// the no-setup path.
-	if strings.HasSuffix(verb, "/forge") || verb == "forge" {
+	if strings.HasSuffix(verb, "/kranq") || verb == "kranq" {
 		sub, remainder, found := strings.Cut(strings.TrimSpace(rest), " ")
 		if !found {
 			return cmd, fmt.Errorf("%q is not a git command", firstWord(trimmed))

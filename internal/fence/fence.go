@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-const Namespace = "refs/forge/fence"
+const Namespace = "refs/kranq/fence"
 
 var (
 	ErrHeld     = errors.New("the fence is already held by another attempt")
@@ -71,15 +71,15 @@ func (c *Client) git(ctx context.Context, stdin string, args ...string) (string,
 		run = execGit
 	}
 	env := []string{
-		"GIT_AUTHOR_NAME=forge", "GIT_AUTHOR_EMAIL=forge@localhost",
-		"GIT_COMMITTER_NAME=forge", "GIT_COMMITTER_EMAIL=forge@localhost",
+		"GIT_AUTHOR_NAME=kranq", "GIT_AUTHOR_EMAIL=kranq@localhost",
+		"GIT_COMMITTER_NAME=kranq", "GIT_COMMITTER_EMAIL=kranq@localhost",
 		"GIT_TERMINAL_PROMPT=0",
 	}
 	if c.Token != "" {
-		env = append(env, "FORGE_GIT_TOKEN="+c.Token)
+		env = append(env, "KRANQ_GIT_TOKEN="+c.Token)
 		args = append([]string{
 			"-c", "credential.helper=",
-			"-c", `credential.helper=!f() { echo username=x-token-auth; echo "password=$FORGE_GIT_TOKEN"; }; f`,
+			"-c", `credential.helper=!f() { echo username=x-token-auth; echo "password=$KRANQ_GIT_TOKEN"; }; f`,
 		}, args...)
 	}
 	return run(ctx, c.Dir, env, args, stdin)

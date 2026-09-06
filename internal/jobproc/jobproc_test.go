@@ -13,7 +13,7 @@ func TestResultRoundTrip(t *testing.T) {
 	if _, ok := ReadResult(dir); ok {
 		t.Fatal("a result appeared before anything wrote one")
 	}
-	want := Result{ExitCode: 42, VMName: "forge-run-dx-spec-aa", FenceRef: "refs/forge/fence/x", FenceHeld: true}
+	want := Result{ExitCode: 42, VMName: "kranq-run-dx-spec-aa", FenceRef: "refs/kranq/fence/x", FenceHeld: true}
 	if err := WriteResult(dir, want); err != nil {
 		t.Fatal(err)
 	}

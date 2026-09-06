@@ -14,9 +14,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/state"
-	"github.com/effetmonstre/forge/internal/svc"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/state"
+	"github.com/simon-em/kranq/internal/svc"
 )
 
 type Backend interface {

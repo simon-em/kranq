@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/effetmonstre/forge/internal/daemon"
-	"github.com/effetmonstre/forge/internal/exitcode"
+	"github.com/simon-em/kranq/internal/daemon"
+	"github.com/simon-em/kranq/internal/exitcode"
 )
 
 func invoke(t *testing.T, args ...string) (int, string, string) {
@@ -36,7 +36,7 @@ func TestNoArgumentsIsAUsageError(t *testing.T) {
 	if code != exitcode.Usage {
 		t.Errorf("exit = %d, want %d", code, exitcode.Usage)
 	}
-	if !strings.Contains(errb, "usage: forge") {
+	if !strings.Contains(errb, "usage: kranq") {
 		t.Errorf("stderr did not carry usage:\n%s", errb)
 	}
 }
@@ -177,8 +177,8 @@ func TestParsePermutedCollectsPositionalsAroundFlags(t *testing.T) {
 
 func isolate(t *testing.T) {
 	t.Helper()
-	t.Setenv("FORGE_HOME", t.TempDir())
-	t.Setenv("FORGE_AUTOSTART", "0")
+	t.Setenv("KRANQ_HOME", t.TempDir())
+	t.Setenv("KRANQ_AUTOSTART", "0")
 }
 
 func TestRunNeedsARepoAndBranch(t *testing.T) {
@@ -206,7 +206,7 @@ func TestRunReportsAMissingSpecFileBeforeDoingAnything(t *testing.T) {
 
 func TestSettingsFallBackToTheStoredEnvFile(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("FORGE_HOME", home)
+	t.Setenv("KRANQ_HOME", home)
 	t.Setenv("CLAUDE_CODE_OAUTH_TOKEN", "")
 
 	if got := settings(home)("CLAUDE_CODE_OAUTH_TOKEN"); got != "" {
@@ -230,15 +230,15 @@ func TestSettingsFallBackToTheStoredEnvFile(t *testing.T) {
 // started over ssh or by launchd has almost no environment at all.
 func TestEverySettingComesFromTheEnvFileToo(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("FORGE_HOME", home)
-	for _, name := range []string{"FORGE_MAX_VMS", "FORGE_GIT_REMOTE", "FORGE_HTTP_ADDR", "FORGE_LIMA_HOME"} {
+	t.Setenv("KRANQ_HOME", home)
+	for _, name := range []string{"KRANQ_MAX_VMS", "KRANQ_GIT_REMOTE", "KRANQ_HTTP_ADDR", "KRANQ_LIMA_HOME"} {
 		t.Setenv(name, "")
 	}
 	for _, kv := range [][2]string{
-		{"FORGE_MAX_VMS", "1"},
-		{"FORGE_GIT_REMOTE", "git@bitbucket.org:effetmonstre"},
-		{"FORGE_HTTP_ADDR", "127.0.0.1:8420"},
-		{"FORGE_LIMA_HOME", home + "/lima"},
+		{"KRANQ_MAX_VMS", "1"},
+		{"KRANQ_GIT_REMOTE", "git@bitbucket.org:effetmonstre"},
+		{"KRANQ_HTTP_ADDR", "127.0.0.1:8420"},
+		{"KRANQ_LIMA_HOME", home + "/lima"},
 	} {
 		if err := daemon.SetEnv(home, kv[0], kv[1]); err != nil {
 			t.Fatal(err)
@@ -263,28 +263,28 @@ func TestEverySettingComesFromTheEnvFileToo(t *testing.T) {
 // ever admitted.
 func TestABadNumberFallsBackToTheDefault(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("FORGE_HOME", home)
-	t.Setenv("FORGE_MAX_VMS", "not-a-number")
+	t.Setenv("KRANQ_HOME", home)
+	t.Setenv("KRANQ_MAX_VMS", "not-a-number")
 	if got := daemonConfig().MaxVMs; got != 2 {
 		t.Errorf("MaxVMs = %d, want the default 2", got)
 	}
 }
 
-// forge config ls prints values, so a secret must never be one of them.
+// kranq config ls prints values, so a secret must never be one of them.
 func TestConfigNeverPrintsASecret(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("FORGE_HOME", home)
+	t.Setenv("KRANQ_HOME", home)
 	if err := daemon.SetEnv(home, "CLAUDE_CODE_OAUTH_TOKEN", "sk-ant-oat01-verysecret"); err != nil {
 		t.Fatal(err)
 	}
-	if err := daemon.SetEnv(home, "FORGE_MAX_VMS", "1"); err != nil {
+	if err := daemon.SetEnv(home, "KRANQ_MAX_VMS", "1"); err != nil {
 		t.Fatal(err)
 	}
 	_, out, errb := invoke(t, "config", "ls")
 	if strings.Contains(out+errb, "verysecret") {
 		t.Fatalf("a secret was printed:\n%s%s", out, errb)
 	}
-	if !strings.Contains(out, "FORGE_MAX_VMS") || !strings.Contains(out, "1") {
+	if !strings.Contains(out, "KRANQ_MAX_VMS") || !strings.Contains(out, "1") {
 		t.Fatalf("an ordinary setting was not shown:\n%s", out)
 	}
 	if code, out, _ := invoke(t, "config", "get", "CLAUDE_CODE_OAUTH_TOKEN"); code == exitcode.OK || strings.Contains(out, "verysecret") {
@@ -292,58 +292,58 @@ func TestConfigNeverPrintsASecret(t *testing.T) {
 	}
 }
 
-// The daemon may be running VMs in a lima home set in $FORGE_HOME/env. A CLI
+// The daemon may be running VMs in a lima home set in $KRANQ_HOME/env. A CLI
 // that only read the environment would list, and offer to delete, a different
 // set of VMs than the ones actually running.
 func TestLimaHomeComesFromTheConfigFileToo(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("FORGE_HOME", home)
-	t.Setenv("FORGE_LIMA_HOME", "")
+	t.Setenv("KRANQ_HOME", home)
+	t.Setenv("KRANQ_LIMA_HOME", "")
 	if got := limaHomeEnv(); got != nil {
 		t.Fatalf("got %v with nothing configured", got)
 	}
-	if err := daemon.SetEnv(home, "FORGE_LIMA_HOME", home+"/lima"); err != nil {
+	if err := daemon.SetEnv(home, "KRANQ_LIMA_HOME", home+"/lima"); err != nil {
 		t.Fatal(err)
 	}
 	got := limaHomeEnv()
 	if len(got) != 1 || got[0] != "LIMA_HOME="+home+"/lima" {
 		t.Fatalf("got %v, want the value from the env file", got)
 	}
-	t.Setenv("FORGE_LIMA_HOME", "/tmp/override")
+	t.Setenv("KRANQ_LIMA_HOME", "/tmp/override")
 	if got := limaHomeEnv(); got[0] != "LIMA_HOME=/tmp/override" {
 		t.Fatalf("got %v, want the environment to win", got)
 	}
 }
 
-// A setting forge actually reads must be in the known list, or `config set`
+// A setting kranq actually reads must be in the known list, or `config set`
 // warns that it is unused and the person reasonably assumes it does nothing.
 func TestEverySettingTheDaemonReadsIsDocumented(t *testing.T) {
 	for _, name := range []string{
-		"FORGE_MAX_VMS", "FORGE_MEMORY_HEADROOM_MB", "FORGE_GIT_REMOTE",
-		"FORGE_LIMA_HOME", "FORGE_HTTP_ADDR", "FORGE_NODE", "FORGE_AUTO_CREATE_REPOS",
+		"KRANQ_MAX_VMS", "KRANQ_MEMORY_HEADROOM_MB", "KRANQ_GIT_REMOTE",
+		"KRANQ_LIMA_HOME", "KRANQ_HTTP_ADDR", "KRANQ_NODE", "KRANQ_AUTO_CREATE_REPOS",
 	} {
 		if _, ok := knownSettings[name]; !ok {
-			t.Errorf("%s is read by the daemon but `forge config set` calls it unknown", name)
+			t.Errorf("%s is read by the daemon but `kranq config set` calls it unknown", name)
 		}
 	}
 }
 
 func TestAutoCreateReposDefaultsOn(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv("FORGE_HOME", home)
-	t.Setenv("FORGE_AUTO_CREATE_REPOS", "")
+	t.Setenv("KRANQ_HOME", home)
+	t.Setenv("KRANQ_AUTO_CREATE_REPOS", "")
 	if !daemonConfig().AutoCreateRepos {
 		t.Fatal("the simple case should not need a setting to work")
 	}
 	for _, off := range []string{"false", "0", "no", "off", "FALSE"} {
-		if err := daemon.SetEnv(home, "FORGE_AUTO_CREATE_REPOS", off); err != nil {
+		if err := daemon.SetEnv(home, "KRANQ_AUTO_CREATE_REPOS", off); err != nil {
 			t.Fatal(err)
 		}
 		if daemonConfig().AutoCreateRepos {
 			t.Errorf("%q did not turn it off", off)
 		}
 	}
-	if err := daemon.SetEnv(home, "FORGE_AUTO_CREATE_REPOS", "true"); err != nil {
+	if err := daemon.SetEnv(home, "KRANQ_AUTO_CREATE_REPOS", "true"); err != nil {
 		t.Fatal(err)
 	}
 	if !daemonConfig().AutoCreateRepos {
@@ -351,12 +351,12 @@ func TestAutoCreateReposDefaultsOn(t *testing.T) {
 	}
 }
 
-// When a package manager installed forge it owns the binary and PATH, and
+// When a package manager installed kranq it owns the binary and PATH, and
 // copying it elsewhere would leave two copies that upgrade separately.
 func TestDepsOnlyInstallLeavesTheBinaryAlone(t *testing.T) {
 	home := t.TempDir()
 	prefix := filepath.Join(t.TempDir(), "bin")
-	t.Setenv("FORGE_HOME", home)
+	t.Setenv("KRANQ_HOME", home)
 	profile := filepath.Join(t.TempDir(), ".zprofile")
 	t.Setenv("HOME", filepath.Dir(profile))
 
@@ -364,10 +364,10 @@ func TestDepsOnlyInstallLeavesTheBinaryAlone(t *testing.T) {
 	if code != exitcode.OK {
 		t.Fatalf("code %d: %s", code, errb)
 	}
-	if _, err := os.Stat(filepath.Join(prefix, "forge")); err == nil {
+	if _, err := os.Stat(filepath.Join(prefix, "kranq")); err == nil {
 		t.Fatal("--deps-only copied the binary anyway")
 	}
-	if body, err := os.ReadFile(profile); err == nil && strings.Contains(string(body), "forge") {
+	if body, err := os.ReadFile(profile); err == nil && strings.Contains(string(body), "kranq") {
 		t.Fatalf("--deps-only edited a shell profile:\n%s", body)
 	}
 }

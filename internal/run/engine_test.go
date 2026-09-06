@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/image"
-	"github.com/effetmonstre/forge/internal/vm"
+	"github.com/simon-em/kranq/internal/image"
+	"github.com/simon-em/kranq/internal/vm"
 )
 
 func engine(t *testing.T, f *vm.Fake) *Engine {
@@ -31,7 +31,7 @@ func checkout(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	body := "MEMORY 3GiB\nCPUS 4\nRUN echo provisioning\n"
-	if err := os.WriteFile(filepath.Join(dir, "Forgefile"), []byte(body), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "Kranqfile"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return dir
@@ -69,7 +69,7 @@ func TestExecuteRunsAJobAndAlwaysDestroysItsVM(t *testing.T) {
 func TestExecuteDestroysTheVMWhenTheJobFails(t *testing.T) {
 	f := vm.NewFake()
 	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
-		if strings.Contains(script, "forge-task.sh") {
+		if strings.Contains(script, "kranq-task.sh") {
 			return 5, nil
 		}
 		return 0, nil
@@ -90,7 +90,7 @@ func TestExecuteDestroysTheVMWhenCancelled(t *testing.T) {
 	f := vm.NewFake()
 	ctx, cancel := context.WithCancel(context.Background())
 	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
-		if strings.Contains(script, "forge-task.sh") {
+		if strings.Contains(script, "kranq-task.sh") {
 			cancel()
 			return -1, context.Canceled
 		}
@@ -109,7 +109,7 @@ func TestTheJobRunsInAFreshCheckoutOfTheRequestedRef(t *testing.T) {
 	f := vm.NewFake()
 	var job string
 	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
-		if strings.Contains(script, "forge-task.sh") {
+		if strings.Contains(script, "kranq-task.sh") {
 			job = script
 		}
 		return 0, nil
@@ -123,9 +123,9 @@ func TestTheJobRunsInAFreshCheckoutOfTheRequestedRef(t *testing.T) {
 		`rm -rf "$HOME/work"`,
 		"--branch 'ci/lima'",
 		`cd "$HOME/work"`,
-		"exec bash /tmp/forge-task.sh",
+		"exec bash /tmp/kranq-task.sh",
 		"export MAINTENANCE_SCAN_URL='dx.ca'",
-		"export FORGE_GIT_TOKEN='s3cret'",
+		"export KRANQ_GIT_TOKEN='s3cret'",
 	} {
 		if !strings.Contains(job, want) {
 			t.Errorf("the job script is missing %q:\n%s", want, job)
@@ -137,7 +137,7 @@ func TestArtifactsAreCollectedEvenWhenTheJobFails(t *testing.T) {
 	f := vm.NewFake()
 	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
 		switch {
-		case strings.Contains(script, "forge-task.sh"):
+		case strings.Contains(script, "kranq-task.sh"):
 			return 1, nil
 		case strings.HasPrefix(script, "test -d"):
 			return 0, nil
@@ -174,7 +174,7 @@ func TestNoArtifactsWhenTheJobLeftNone(t *testing.T) {
 	}
 }
 
-func TestAMissingForgefileFailsBeforeAnyVMIsCreated(t *testing.T) {
+func TestAMissingKranqfileFailsBeforeAnyVMIsCreated(t *testing.T) {
 	f := vm.NewFake()
 	req := request(t)
 	req.Checkout = t.TempDir()
@@ -189,7 +189,7 @@ func TestAMissingForgefileFailsBeforeAnyVMIsCreated(t *testing.T) {
 func TestKeepNeverDestroysEvenOnFailure(t *testing.T) {
 	f := vm.NewFake()
 	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
-		if strings.Contains(script, "forge-task.sh") {
+		if strings.Contains(script, "kranq-task.sh") {
 			return 1, nil
 		}
 		return 0, nil
@@ -208,7 +208,7 @@ func TestKeepNeverDestroysEvenOnFailure(t *testing.T) {
 func TestKeepOnFailureKeepsAFailedRunForInspection(t *testing.T) {
 	f := vm.NewFake()
 	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
-		if strings.Contains(script, "forge-task.sh") {
+		if strings.Contains(script, "kranq-task.sh") {
 			return 1, nil
 		}
 		return 0, nil
@@ -240,7 +240,7 @@ func TestKeepOnFailureStillDestroysASuccess(t *testing.T) {
 func TestKeepOnFailureKeepsAVMWhenTheRunErroredRatherThanExited(t *testing.T) {
 	f := vm.NewFake()
 	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
-		if strings.Contains(script, "forge-task.sh") {
+		if strings.Contains(script, "kranq-task.sh") {
 			return -1, errors.New("the guest went away")
 		}
 		return 0, nil
@@ -274,7 +274,7 @@ func TestParseKeepRejectsNonsense(t *testing.T) {
 	}
 }
 
-// The Forgefile sizes the run VM, not the layers, so a layer shared with a project
+// The Kranqfile sizes the run VM, not the layers, so a layer shared with a project
 // that wants less memory is not the thing that decides how big this job gets.
 func TestTheRunVMIsSizedByTheBuildFile(t *testing.T) {
 	f := vm.NewFake()
@@ -285,7 +285,7 @@ func TestTheRunVMIsSizedByTheBuildFile(t *testing.T) {
 	list, _ := f.List(context.Background())
 	for _, inst := range list {
 		if inst.Name == res.VMName && inst.CPUs != 4 {
-			t.Errorf("the job VM got %d cpus, want the 4 the Forgefile asked for", inst.CPUs)
+			t.Errorf("the job VM got %d cpus, want the 4 the Kranqfile asked for", inst.CPUs)
 		}
 	}
 }
@@ -294,10 +294,10 @@ func TestACustomBuildFileIsHonoured(t *testing.T) {
 	f := vm.NewFake()
 	req := request(t)
 	body := "RUN echo staging\n"
-	if err := os.WriteFile(filepath.Join(req.Checkout, "Forgefile.staging"), []byte(body), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(req.Checkout, "Kranqfile.staging"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	req.Forgefile = "Forgefile.staging"
+	req.Kranqfile = "Kranqfile.staging"
 
 	var scripts []string
 	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
@@ -314,11 +314,11 @@ func TestACustomBuildFileIsHonoured(t *testing.T) {
 
 func TestAMissingBuildFileNamesIt(t *testing.T) {
 	req := request(t)
-	if err := os.Remove(filepath.Join(req.Checkout, "Forgefile")); err != nil {
+	if err := os.Remove(filepath.Join(req.Checkout, "Kranqfile")); err != nil {
 		t.Fatal(err)
 	}
 	_, err := engine(t, vm.NewFake()).Execute(context.Background(), req, io.Discard)
-	if err == nil || !strings.Contains(err.Error(), "Forgefile") {
+	if err == nil || !strings.Contains(err.Error(), "Kranqfile") {
 		t.Errorf("error = %v, want it to name the file the repository is missing", err)
 	}
 }

@@ -15,7 +15,7 @@ const (
 	human = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHVtYW5rZXlmb3JhZG1pbmlzdHJhdGlvbg== me@laptop"
 )
 
-const command = "/Users/macmini/.local/bin/forge git-receive --name ci-dx"
+const command = "/Users/macmini/.local/bin/kranq git-receive --name ci-dx"
 
 func mustKey(t *testing.T, line string) Key {
 	t.Helper()
@@ -112,7 +112,7 @@ func TestAddingTheSameKeyUnderAnotherNameIsRefused(t *testing.T) {
 	}
 }
 
-func TestListReportsOnlyForgeEntries(t *testing.T) {
+func TestListReportsOnlyKranqEntries(t *testing.T) {
 	content := human + "\n"
 	content, _ = Add(content, mustKey(t, pubA), "ci-dx", command)
 	content, _ = Add(content, mustKey(t, pubB), "ci-other", command)

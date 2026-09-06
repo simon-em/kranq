@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-var marker = regexp.MustCompile(`FORGE-GATE exhausted resets_at=(\d+) window=(\S+)`)
+var marker = regexp.MustCompile(`KRANQ-GATE exhausted resets_at=(\d+) window=(\S+)`)
 
 func ParseExhaustion(log string) (resetsAt time.Time, window string, found bool) {
 	m := marker.FindAllStringSubmatch(log, -1)

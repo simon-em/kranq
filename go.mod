@@ -1,4 +1,4 @@
-module github.com/effetmonstre/forge
+module github.com/simon-em/kranq
 
 go 1.24
 

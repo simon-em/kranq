@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/gitsrv"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/gitsrv"
 )
 
-// forge git-receive is the forced command an authorized_keys entry runs. ssh
+// kranq git-receive is the forced command an authorized_keys entry runs. ssh
 // puts what git asked for in SSH_ORIGINAL_COMMAND and runs this instead, so
 // this is the whole boundary between a key and a shell on the build machine.
 //
@@ -31,54 +31,54 @@ func runGitReceive(env Env, args []string) int {
 
 	cmd, err := receiveTarget(rest, *upload)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Unauthorized
 	}
 
-	home := forgeHome()
+	home := kranqHome()
 	cfg := daemonConfig()
 	if !cfg.AutoCreateRepos {
 		if _, statErr := os.Stat(filepath.Join(home, "repos", cmd.Repo+".git")); statErr != nil {
-			fmt.Fprintf(env.Stderr, "forge: no repository called %q here, and this machine "+
-				"does not create them on demand.\nforge repo create %s\n", cmd.Repo, cmd.Repo)
+			fmt.Fprintf(env.Stderr, "kranq: no repository called %q here, and this machine "+
+				"does not create them on demand.\nkranq repo create %s\n", cmd.Repo, cmd.Repo)
 			return exitcode.Misconfigured
 		}
 	}
 	self, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	store := &gitsrv.Store{
 		Root:       filepath.Join(home, "repos"),
-		ForgeBin:   self,
+		KranqBin:   self,
 		SocketPath: cfg.SocketPath(),
 	}
 	dir, err := store.Ensure(context.Background(), cmd.Repo)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 
 	binary, err := gitCorePath(cmd.Verb)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.MissingDep
 	}
 	// Replacing this process rather than wrapping it keeps git's own protocol on
 	// the original stdin and stdout, which is the whole conversation.
-	envv := append(os.Environ(), "FORGE_KEY_NAME="+*name, "FORGE_HOME="+home)
+	envv := append(os.Environ(), "KRANQ_KEY_NAME="+*name, "KRANQ_HOME="+home)
 	if err := syscall.Exec(binary, []string{cmd.Verb, dir}, envv); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	return exitcode.InternalError
 }
 
 // Two ways in. Under a forced command, ssh puts what git asked for in
-// SSH_ORIGINAL_COMMAND. With `git push --receive-pack="forge git-receive"`,
-// git runs forge directly and the repository arrives as an argument, which is
-// what lets anyone who can already ssh here push without a forge-specific key.
+// SSH_ORIGINAL_COMMAND. With `git push --receive-pack="kranq git-receive"`,
+// git runs kranq directly and the repository arrives as an argument, which is
+// what lets anyone who can already ssh here push without a kranq-specific key.
 func receiveTarget(args []string, upload bool) (gitsrv.SSHCommand, error) {
 	if len(args) > 0 {
 		repo, err := gitsrv.RepoFromPath(args[0])

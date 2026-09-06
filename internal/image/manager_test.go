@@ -10,8 +10,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/project"
-	"github.com/effetmonstre/forge/internal/vm"
+	"github.com/simon-em/kranq/internal/project"
+	"github.com/simon-em/kranq/internal/vm"
 )
 
 func manager(t *testing.T, f *vm.Fake) *Manager {
@@ -278,11 +278,11 @@ func TestPruneKeepsRecentHeadsWholeAndNeverTouchesRunningOrForeign(t *testing.T)
 	m := manager(t, f)
 	m.Keep = 1
 
-	base := "forge-base-abc-100"
+	base := "kranq-base-abc-100"
 	f.Seed(base, "Stopped")
 	chains := map[string][]string{
-		"fresh": {"forge-layer-01-aaaa", "forge-layer-02-aaab"},
-		"stale": {"forge-layer-01-aaaa", "forge-layer-02-bbbb"},
+		"fresh": {"kranq-layer-01-aaaa", "kranq-layer-02-aaab"},
+		"stale": {"kranq-layer-01-aaaa", "kranq-layer-02-bbbb"},
 	}
 	for label, chain := range chains {
 		used := time.Unix(1_780_000_000, 0)
@@ -298,29 +298,29 @@ func TestPruneKeepsRecentHeadsWholeAndNeverTouchesRunningOrForeign(t *testing.T)
 			parent = name
 		}
 	}
-	f.Seed("forge-proj-dx-old", "Stopped")
+	f.Seed("kranq-proj-dx-old", "Stopped")
 	f.Seed("ci-proj-dx-36ec09c9f7", "Stopped")
-	f.Seed("forge-layer-09-busy", "Running")
+	f.Seed("kranq-layer-09-busy", "Running")
 
 	pruned, err := m.Prune(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"forge-layer-01-aaaa", "forge-layer-02-aaab"} {
+	for _, name := range []string{"kranq-layer-01-aaaa", "kranq-layer-02-aaab"} {
 		if !f.Exists(name) {
 			t.Errorf("%s was pruned; the most recent head must keep its whole ancestry", name)
 		}
 	}
-	if f.Exists("forge-layer-02-bbbb") {
+	if f.Exists("kranq-layer-02-bbbb") {
 		t.Error("the least recently used head survived")
 	}
-	if f.Exists("forge-proj-dx-old") {
-		t.Error("an image from the scheme the Forgefile replaced was kept; nothing can use it")
+	if f.Exists("kranq-proj-dx-old") {
+		t.Error("an image from the scheme the Kranqfile replaced was kept; nothing can use it")
 	}
 	if !f.Exists("ci-proj-dx-36ec09c9f7") {
-		t.Error("prune destroyed an instance belonging to the system forge replaces")
+		t.Error("prune destroyed an instance belonging to the system kranq replaces")
 	}
-	if !f.Exists("forge-layer-09-busy") {
+	if !f.Exists("kranq-layer-09-busy") {
 		t.Error("prune destroyed a Running layer")
 	}
 	if !f.Exists(base) {
@@ -331,16 +331,16 @@ func TestPruneKeepsRecentHeadsWholeAndNeverTouchesRunningOrForeign(t *testing.T)
 	}
 }
 
-func TestPruneForgetsMetadataForImagesThatAreGone(t *testing.T) {
+func TestPruneKranqtsMetadataForImagesThatAreGone(t *testing.T) {
 	f := vm.NewFake()
 	m := manager(t, f)
-	if err := m.meta().save(Meta{Name: "forge-layer-01-ghost"}); err != nil {
+	if err := m.meta().save(Meta{Name: "kranq-layer-01-ghost"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Prune(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := m.Describe("forge-layer-01-ghost"); ok {
+	if _, ok := m.Describe("kranq-layer-01-ghost"); ok {
 		t.Error("metadata outlived the image it describes")
 	}
 }
@@ -349,7 +349,7 @@ func TestDestroyRefusesForeignInstances(t *testing.T) {
 	f := vm.NewFake()
 	f.Seed("default", "Stopped")
 	if err := manager(t, f).Destroy(context.Background(), "default"); err == nil {
-		t.Error("Destroy must refuse an instance forge does not own")
+		t.Error("Destroy must refuse an instance kranq does not own")
 	}
 	if !f.Exists("default") {
 		t.Error("it destroyed it anyway")
@@ -386,7 +386,7 @@ func TestEnsureRefusesToRunWithoutSomewhereToRecordCompletion(t *testing.T) {
 }
 
 // The base template is 1GiB, which is not enough to run a bundle install. A
-// layer builds at the size the Forgefile asked for.
+// layer builds at the size the Kranqfile asked for.
 func TestLayersAreBuiltAtTheSizeTheBuildFileAsksFor(t *testing.T) {
 	f := vm.NewFake()
 	plan, err := manager(t, f).Ensure(context.Background(), "dx", dxProject(t), io.Discard)
@@ -414,7 +414,7 @@ func TestLayersAreBuiltAtTheSizeTheBuildFileAsksFor(t *testing.T) {
 // boots; its sshd never answers again. Nothing in a unit test can see that, so
 // the shape of the command is pinned here instead.
 func TestTheCopyIsInstalledWithoutTouchingExistingDirectories(t *testing.T) {
-	script := installScript([]string{"/forge/build", "/opt/ci/seed.sql"})
+	script := installScript([]string{"/kranq/build", "/opt/ci/seed.sql"})
 	if !strings.Contains(script, "--no-overwrite-dir") {
 		t.Errorf("install script does not preserve existing directory metadata:\n%s", script)
 	}
@@ -424,9 +424,39 @@ func TestTheCopyIsInstalledWithoutTouchingExistingDirectories(t *testing.T) {
 	if !strings.Contains(script, "set -euo pipefail") {
 		t.Errorf("the tar pipeline needs pipefail, or a failed pack reads as success:\n%s", script)
 	}
-	for _, root := range []string{"'/forge/build'", "'/opt/ci/seed.sql'"} {
+	for _, root := range []string{"'/kranq/build'", "'/opt/ci/seed.sql'"} {
 		if !strings.Contains(script, root) {
 			t.Errorf("copied paths are not handed to the build user: %s missing from\n%s", root, script)
 		}
+	}
+}
+
+// The tool was called forge until recently, and a build machine still holds
+// images by that name. Managed is what permits deleting anything at all, so if
+// it stopped recognising them they would sit there forever with nothing able to
+// sweep them.
+func TestImagesFromBeforeTheRenameAreStillSwept(t *testing.T) {
+	f := vm.NewFake()
+	m := manager(t, f)
+	for _, name := range []string{
+		"forge-base-8517c8a5d2-1478", "forge-layer-01-97ab2ab29342",
+		"forge-proj-dx-c2c42fefac", "kranq-proj-dx-old",
+	} {
+		f.Seed(name, "Stopped")
+		if !Managed(name) {
+			t.Errorf("%s is not recognised, so nothing can delete it", name)
+		}
+	}
+	f.Seed("ci-run-dx-spec-main-123", "Stopped")
+
+	pruned, err := m.Prune(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pruned) != 4 {
+		t.Errorf("pruned %v, want all four pre-rename images", pruned)
+	}
+	if !f.Exists("ci-run-dx-spec-main-123") {
+		t.Error("prune destroyed an instance belonging to the system this replaces")
 	}
 }

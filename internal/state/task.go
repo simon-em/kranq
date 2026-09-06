@@ -38,7 +38,7 @@ type Task struct {
 	MemoryBytes  int64             `json:"memory_bytes"`
 	CPUs         int               `json:"cpus"`
 	SpecYAML     string            `json:"spec_yaml"`
-	Forgefile    string            `json:"forgefile,omitempty"`
+	Kranqfile    string            `json:"kranqfile,omitempty"`
 	Env          map[string]string `json:"-"`
 	VMName       string            `json:"vm_name,omitempty"`
 	VMKept       bool              `json:"vm_kept,omitempty"`

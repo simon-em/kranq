@@ -13,9 +13,9 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/ipc"
-	"github.com/effetmonstre/forge/internal/state"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/ipc"
+	"github.com/simon-em/kranq/internal/state"
 )
 
 func runPS(env Env, args []string) int {
@@ -31,7 +31,7 @@ func runPS(env Env, args []string) int {
 	}
 	tasks, err := client.List(context.Background())
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Unreachable
 	}
 	w := tabwriter.NewWriter(env.Stdout, 0, 0, 2, ' ', 0)
@@ -75,7 +75,7 @@ func runLogs(env Env, args []string) int {
 		return exitcode.Usage
 	}
 	if len(positional) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: forge logs <id> [-f]")
+		fmt.Fprintln(env.Stderr, "usage: kranq logs <id> [-f]")
 		return exitcode.Usage
 	}
 	client, code := connect(env, false)
@@ -83,7 +83,7 @@ func runLogs(env Env, args []string) int {
 		return code
 	}
 	if err := client.Logs(context.Background(), positional[0], *follow, env.Stdout); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return codeOf(err, exitcode.Unreachable)
 	}
 	return exitcode.OK
@@ -91,7 +91,7 @@ func runLogs(env Env, args []string) int {
 
 func runCancel(env Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(env.Stderr, "usage: forge cancel <id>...")
+		fmt.Fprintln(env.Stderr, "usage: kranq cancel <id>...")
 		return exitcode.Usage
 	}
 	client, code := connect(env, false)
@@ -102,7 +102,7 @@ func runCancel(env Env, args []string) int {
 	for _, id := range args {
 		t, err := client.Cancel(context.Background(), id)
 		if err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %s: %v\n", id, err)
+			fmt.Fprintf(env.Stderr, "kranq: %s: %v\n", id, err)
 			worst = codeOf(err, exitcode.Unreachable)
 			continue
 		}
@@ -127,7 +127,7 @@ func asRemote(err error, target **ipc.RemoteError) bool {
 	return ok
 }
 
-// fetch is what brings artifacts back over ssh: `ssh machine forge fetch <id>`
+// fetch is what brings artifacts back over ssh: `ssh machine kranq fetch <id>`
 // streams the tar.gz, so a caller needs nothing installed but tar. With --out
 // it unpacks locally instead, which is what you want at a terminal.
 func runFetch(env Env, args []string) int {
@@ -139,7 +139,7 @@ func runFetch(env Env, args []string) int {
 		return exitcode.Usage
 	}
 	if len(positional) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: forge fetch <id> [--out DIR]")
+		fmt.Fprintln(env.Stderr, "usage: kranq fetch <id> [--out DIR]")
 		return exitcode.Usage
 	}
 	client, code := connect(env, false)
@@ -154,11 +154,11 @@ func runFetch(env Env, args []string) int {
 	// from a run that failed, and an empty stream is how the caller sees it.
 	ok, err := client.Artifacts(context.Background(), positional[0], env.Stdout)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return codeOf(err, exitcode.Unreachable)
 	}
 	if !ok {
-		fmt.Fprintln(env.Stderr, "forge: this task produced no artifacts")
+		fmt.Fprintln(env.Stderr, "kranq: this task produced no artifacts")
 	}
 	return exitcode.OK
 }
@@ -170,19 +170,19 @@ func fetchArtifacts(client *ipc.Client, id, dest string, env Env) {
 	var buf strings.Builder
 	ok, err := client.Artifacts(context.Background(), id, &buf)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: artifacts could not be fetched: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: artifacts could not be fetched: %v\n", err)
 		return
 	}
 	if !ok {
-		fmt.Fprintln(env.Stderr, "forge: this task produced no artifacts")
+		fmt.Fprintln(env.Stderr, "kranq: this task produced no artifacts")
 		return
 	}
 	n, err := untarInto(strings.NewReader(buf.String()), dest)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: artifacts arrived but could not be written: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: artifacts arrived but could not be written: %v\n", err)
 		return
 	}
-	fmt.Fprintf(env.Stderr, "forge: %d artifact file(s) in %s\n", n, dest)
+	fmt.Fprintf(env.Stderr, "kranq: %d artifact file(s) in %s\n", n, dest)
 }
 
 func untarInto(r io.Reader, dest string) (int, error) {

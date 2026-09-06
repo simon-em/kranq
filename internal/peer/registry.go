@@ -17,7 +17,7 @@ var (
 	ErrNoPeers  = errors.New("no peers are registered")
 )
 
-const DefaultBin = "~/.local/bin/forge"
+const DefaultBin = "~/.local/bin/kranq"
 
 type Peer struct {
 	Name    string `json:"name"`
@@ -97,7 +97,7 @@ func (t Target) SCPArgs(source, dest string) []string {
 // rather than quoted. These characters would change what that shell runs.
 func ValidBin(v string) error {
 	if v == "" {
-		return errors.New("empty forge path")
+		return errors.New("empty kranq path")
 	}
 	if !strings.HasPrefix(v, "/") && !strings.HasPrefix(v, "~/") {
 		return fmt.Errorf("%q must be absolute or start with ~/", v)

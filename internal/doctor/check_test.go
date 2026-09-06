@@ -62,10 +62,10 @@ func TestGitVersionSaysWhyItMatters(t *testing.T) {
 	}
 }
 
-func TestLimaSourceFlagsALimaForgeDoesNotOwn(t *testing.T) {
-	root := "/Users/x/.forge"
+func TestLimaSourceFlagsALimaKranqDoesNotOwn(t *testing.T) {
+	root := "/Users/x/.kranq"
 	if got := LimaSource(root+"/deps/current/bin/limactl", root, true).Level; got != OK {
-		t.Fatalf("forge's own lima: %v", got)
+		t.Fatalf("kranq's own lima: %v", got)
 	}
 	if got := LimaSource("/opt/homebrew/bin/limactl", root, true).Level; got != Warn {
 		t.Fatalf("a homebrew lima should warn: %v", got)
@@ -76,7 +76,7 @@ func TestLimaSourceFlagsALimaForgeDoesNotOwn(t *testing.T) {
 // next job installs it anyway, telling someone to go and install it by hand is
 // worse than saying nothing.
 func TestMissingLimaIsOnlyAFailureWhenNothingWillFetchIt(t *testing.T) {
-	root := "/Users/x/.forge"
+	root := "/Users/x/.kranq"
 	pending := LimaSource("", root, true)
 	if pending.Level != Warn {
 		t.Fatalf("with auto-install on: %v", pending.Level)
@@ -110,17 +110,17 @@ func TestDiskSpace(t *testing.T) {
 }
 
 func TestOrphanVMsAreTheOnesNoTaskOwns(t *testing.T) {
-	c := OrphanVMs([]string{"forge-run-dx-spec-aa", "forge-run-dx-spec-bb"}, []string{"forge-run-dx-spec-aa"})
+	c := OrphanVMs([]string{"kranq-run-dx-spec-aa", "kranq-run-dx-spec-bb"}, []string{"kranq-run-dx-spec-aa"})
 	if c.Level != Warn {
 		t.Fatalf("an orphan should warn: %v", c.Level)
 	}
-	if !strings.Contains(c.Detail, "forge-run-dx-spec-bb") {
+	if !strings.Contains(c.Detail, "kranq-run-dx-spec-bb") {
 		t.Fatalf("the orphan is not named: %q", c.Detail)
 	}
-	if strings.Contains(c.Detail, "forge-run-dx-spec-aa") {
+	if strings.Contains(c.Detail, "kranq-run-dx-spec-aa") {
 		t.Fatalf("an owned VM was reported as an orphan: %q", c.Detail)
 	}
-	if OrphanVMs([]string{"forge-run-dx-spec-aa"}, []string{"forge-run-dx-spec-aa"}).Level != OK {
+	if OrphanVMs([]string{"kranq-run-dx-spec-aa"}, []string{"kranq-run-dx-spec-aa"}).Level != OK {
 		t.Fatal("a fully owned set should pass")
 	}
 }

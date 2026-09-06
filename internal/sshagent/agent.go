@@ -8,7 +8,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/effetmonstre/forge/internal/sockpath"
+	"github.com/simon-em/kranq/internal/sockpath"
 )
 
 var sockPattern = regexp.MustCompile(`SSH_AUTH_SOCK=([^;]+);`)
@@ -19,7 +19,7 @@ func DefaultKeys() []string {
 		return nil
 	}
 	var keys []string
-	if v := os.Getenv("FORGE_SSH_KEY_FILE"); v != "" {
+	if v := os.Getenv("KRANQ_SSH_KEY_FILE"); v != "" {
 		keys = append(keys, v)
 	}
 	for _, name := range []string{"id_ed25519", "id_rsa", "id_ecdsa"} {
@@ -63,5 +63,5 @@ func Ensure(root string) (string, error) {
 	if hasIdentities(sock) {
 		return sock, nil
 	}
-	return "", errors.New("no ssh identity is available: forward an agent, set FORGE_SSH_KEY_FILE, or forward a token in the task env")
+	return "", errors.New("no ssh identity is available: forward an agent, set KRANQ_SSH_KEY_FILE, or forward a token in the task env")
 }

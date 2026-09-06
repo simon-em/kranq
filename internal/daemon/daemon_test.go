@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/ipc"
-	"github.com/effetmonstre/forge/internal/state"
+	"github.com/simon-em/kranq/internal/ipc"
+	"github.com/simon-em/kranq/internal/state"
 )
 
 type stubExec struct {

@@ -11,12 +11,12 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/effetmonstre/forge/assets"
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/image"
-	"github.com/effetmonstre/forge/internal/project"
-	"github.com/effetmonstre/forge/internal/run"
-	"github.com/effetmonstre/forge/internal/vm"
+	"github.com/simon-em/kranq/assets"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/image"
+	"github.com/simon-em/kranq/internal/project"
+	"github.com/simon-em/kranq/internal/run"
+	"github.com/simon-em/kranq/internal/vm"
 )
 
 func layerDir(home string) string { return filepath.Join(home, "layers") }
@@ -26,7 +26,7 @@ func newImageManager(driver vm.Driver) *image.Manager {
 	return &image.Manager{
 		Driver:   driver,
 		Template: assets.LimaTemplate,
-		Keep:     settingInt(settings(cfg.Home), "FORGE_KEEP_IMAGES", 3),
+		Keep:     settingInt(settings(cfg.Home), "KRANQ_KEEP_IMAGES", 3),
 		MetaDir:  layerDir(cfg.Home),
 	}
 }
@@ -51,7 +51,7 @@ func newManagerWithLima(env Env) (*image.Manager, vm.Driver, error) {
 
 func runImage(env Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(env.Stderr, "usage: forge image ls|build|prune")
+		fmt.Fprintln(env.Stderr, "usage: kranq image ls|build|prune")
 		return exitcode.Usage
 	}
 	subs := map[string]func(Env, []string) int{
@@ -61,7 +61,7 @@ func runImage(env Env, args []string) int {
 	}
 	sub, ok := subs[args[0]]
 	if !ok {
-		fmt.Fprintf(env.Stderr, "forge image: unknown subcommand %q\n", args[0])
+		fmt.Fprintf(env.Stderr, "kranq image: unknown subcommand %q\n", args[0])
 		return exitcode.Usage
 	}
 	return sub(env, args[1:])
@@ -71,7 +71,7 @@ func imageList(env Env, args []string) int {
 	m, driver := newManager()
 	instances, err := driver.List(context.Background())
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.MissingDep
 	}
 	w := tabwriter.NewWriter(env.Stdout, 0, 0, 2, ' ', 0)
@@ -97,8 +97,8 @@ func imageBuild(env Env, args []string) int {
 	fs.SetOutput(env.Stderr)
 	repo := fs.String("repo", "", "repository slug; omit to build only the base image")
 	ref := fs.String("ref", "main", "ref to read the build file from")
-	forgefile := fs.String("forgefile", "", "build file to read, relative to the repository root (default: "+project.DefaultFile+")")
-	remote := fs.String("remote", envOr("FORGE_GIT_REMOTE"), "git remote base")
+	kranqfile := fs.String("kranqfile", "", "build file to read, relative to the repository root (default: "+project.DefaultFile+")")
+	remote := fs.String("remote", envOr("KRANQ_GIT_REMOTE"), "git remote base")
 	if _, err := parsePermuted(fs, args); err != nil {
 		return exitcode.Usage
 	}
@@ -110,7 +110,7 @@ func imageBuild(env Env, args []string) int {
 	defer stop()
 	m, _, err := newManagerWithLima(env)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.MissingDep
 	}
 
@@ -121,32 +121,32 @@ func imageBuild(env Env, args []string) int {
 			return exitcode.OK
 		}
 		if err := m.BuildBase(ctx, name, env.Stderr); err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.CouldNotStart
 		}
 		fmt.Fprintln(env.Stdout, name)
 		return exitcode.OK
 	}
 
-	work, err := os.MkdirTemp("", "forge-image-*")
+	work, err := os.MkdirTemp("", "kranq-image-*")
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	defer os.RemoveAll(work)
 	checkout := work + "/repo"
 	if err := run.HostCheckout(ctx, run.Remote{Base: *remote, Repo: *repo}, *ref, checkout); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.CouldNotStart
 	}
-	proj, err := project.Load(checkout, *forgefile)
+	proj, err := project.Load(checkout, *kranqfile)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InvalidSpec
 	}
 	plan, err := m.Ensure(ctx, *repo, proj, env.Stderr)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.CouldNotStart
 	}
 	fmt.Fprintln(env.Stdout, plan.Image())
@@ -157,7 +157,7 @@ func imagePrune(env Env, args []string) int {
 	m, _ := newManager()
 	pruned, err := m.Prune(context.Background())
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	for _, name := range pruned {

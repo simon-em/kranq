@@ -13,7 +13,7 @@ func TestFromTaskPassesThroughOrdinaryCodes(t *testing.T) {
 func TestFromTaskClampsTheReservedBand(t *testing.T) {
 	for _, code := range []int{64, 75, 126, 127} {
 		if got := FromTask(code); got != 1 {
-			t.Errorf("FromTask(%d) = %d, want 1 so it cannot be mistaken for a forge failure", code, got)
+			t.Errorf("FromTask(%d) = %d, want 1 so it cannot be mistaken for a kranq failure", code, got)
 		}
 	}
 }

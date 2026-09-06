@@ -18,14 +18,14 @@ Two exceptions worth knowing:
 
 ## Running a real job
 
-Needs Lima and an ssh key or a forwarded token. On a machine with neither, forge says so
+Needs Lima and an ssh key or a forwarded token. On a machine with neither, kranq says so
 rather than hanging.
 
 ```sh
-go build -o /tmp/forge .
-/tmp/forge image build                                   # base only, ~2.5 min
-/tmp/forge image build --repo dx --ref ci/lima           # + every layer, ~5 min
-/tmp/forge run smoke.yaml --repo dx --branch ci/lima --artifacts ./out
+go build -o /tmp/kranq .
+/tmp/kranq image build                                   # base only, ~2.5 min
+/tmp/kranq image build --repo dx --ref ci/lima           # + every layer, ~5 min
+/tmp/kranq run smoke.yaml --repo dx --branch ci/lima --artifacts ./out
 ```
 
 A useful smoke spec, which proves the checkout is real, Docker works inside the VM, exports
@@ -39,7 +39,7 @@ steps:
   - name: prove the checkout is real
     run: |
       echo "branch: $(git rev-parse --abbrev-ref HEAD)"
-      test -f Forgefile && echo "the Forgefile is present"
+      test -f Kranqfile && echo "the Kranqfile is present"
   - name: prove the toolchain came from the image
     run: |
       docker run --rm hello-world 2>&1 | grep -q "Hello from Docker" && echo "docker runs containers"
@@ -51,18 +51,18 @@ steps:
       mkdir -p ci-artifacts && echo proof > ci-artifacts/proof.txt
 ```
 
-Lima's own progress output is noisy. To read only forge's:
+Lima's own progress output is noisy. To read only kranq's:
 
 ```sh
-/tmp/forge run smoke.yaml --repo dx --branch ci/lima 2>&1 \
+/tmp/kranq run smoke.yaml --repo dx --branch ci/lima 2>&1 \
   | grep -viE 'hostagent|Time sync|Forwarding UDP|^\|'
 ```
 
 ## Cleaning up
 
 ```sh
-/tmp/forge image ls
-/tmp/forge image prune          # keeps the newest 3 per layer, never touches Running
+/tmp/kranq image ls
+/tmp/kranq image prune          # keeps the newest 3 per layer, never touches Running
 ```
 
 Images are large: a base is ~2.6 GB and dx's layers ~5.5 GB in total. They are the cache, so
@@ -72,7 +72,7 @@ deleting them costs the build time above, not correctness.
 
 Step headers can appear out of order relative to step output, because `ci_step` writes to
 stderr and step bodies write to stdout, and both go through one pipe with different buffering.
-The system forge replaces does this too. The `-o ndjson` event stream planned for phase 2
+The system kranq replaces does this too. The `-o ndjson` event stream planned for phase 2
 fixes it properly; anything sooner would be papering over it.
 
 ## Debugging a failed run
@@ -81,15 +81,15 @@ By default a job VM is destroyed whether the job passed or failed, which means a
 only reproduces on the build machine cannot be investigated. Keep it:
 
 ```sh
-forge run spec.yaml --repo dx --branch main --keep-vm on-failure
-forge vm ls                       # which VMs are alive, and whose task they were
-forge vm shell <task-id>          # a shell inside it
-forge vm shell <task-id> -- cat /tmp/whatever
-forge vm rm --all                 # they are not cleaned up on their own
+kranq run spec.yaml --repo dx --branch main --keep-vm on-failure
+kranq vm ls                       # which VMs are alive, and whose task they were
+kranq vm shell <task-id>          # a shell inside it
+kranq vm shell <task-id> -- cat /tmp/whatever
+kranq vm rm --all                 # they are not cleaned up on their own
 ```
 
 `--keep-vm on-failure` also keeps the VM when the run failed for an infrastructure reason with
 no exit code at all, which is the case most worth looking at.
 
-A kept VM holds several GB and a concurrency slot until removed, so `forge vm ls` is worth
+A kept VM holds several GB and a concurrency slot until removed, so `kranq vm ls` is worth
 checking after a debugging session.

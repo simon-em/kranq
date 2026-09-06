@@ -7,10 +7,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/gate"
-	"github.com/effetmonstre/forge/internal/hostres"
-	"github.com/effetmonstre/forge/internal/state"
-	"github.com/effetmonstre/forge/internal/task"
+	"github.com/simon-em/kranq/internal/gate"
+	"github.com/simon-em/kranq/internal/hostres"
+	"github.com/simon-em/kranq/internal/state"
+	"github.com/simon-em/kranq/internal/task"
 )
 
 type Executor interface {

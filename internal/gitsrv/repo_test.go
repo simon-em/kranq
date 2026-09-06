@@ -11,7 +11,7 @@ import (
 
 func store(t *testing.T) *Store {
 	t.Helper()
-	return &Store{Root: t.TempDir(), ForgeBin: "/usr/local/bin/forge", SocketPath: "/home/x/.forge/forge.sock"}
+	return &Store{Root: t.TempDir(), KranqBin: "/usr/local/bin/kranq", SocketPath: "/home/x/.kranq/kranq.sock"}
 }
 
 // The repo name arrives in a URL from a caller and becomes a directory path.
@@ -127,7 +127,7 @@ func TestHooksAreInstalledAndExecutable(t *testing.T) {
 			t.Fatal(err)
 		}
 		if !strings.Contains(string(body), "git-hook "+phase) {
-			t.Fatalf("%s does not invoke forge: %s", phase, body)
+			t.Fatalf("%s does not invoke kranq: %s", phase, body)
 		}
 		if !strings.Contains(string(body), s.SocketPath) {
 			t.Fatalf("%s cannot reach the daemon: %s", phase, body)
@@ -137,8 +137,8 @@ func TestHooksAreInstalledAndExecutable(t *testing.T) {
 
 func TestHookPathsWithSpacesSurvive(t *testing.T) {
 	s := store(t)
-	s.ForgeBin = "/Users/some one/.local/bin/forge"
-	s.SocketPath = "/Users/some one/.forge/forge.sock"
+	s.KranqBin = "/Users/some one/.local/bin/kranq"
+	s.SocketPath = "/Users/some one/.kranq/kranq.sock"
 	dir, err := s.Ensure(context.Background(), "dx")
 	if err != nil {
 		t.Fatal(err)
@@ -147,7 +147,7 @@ func TestHookPathsWithSpacesSurvive(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(body), `'/Users/some one/.local/bin/forge'`) {
+	if !strings.Contains(string(body), `'/Users/some one/.local/bin/kranq'`) {
 		t.Fatalf("a path with a space was not quoted: %s", body)
 	}
 }

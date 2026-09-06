@@ -1,11 +1,11 @@
-# Pushing work to forge
+# Pushing work to kranq
 
 A job's code can arrive two ways. The old way is a **clone**: the VM fetches the
 repository from the git host, which needs a credential that reaches that host.
-The new way is a **push**: you send the code to forge, and forge already has it.
+The new way is a **push**: you send the code to kranq, and kranq already has it.
 
 ```sh
-git push forge main -o task=ci/tasks/spec.yaml
+git push kranq main -o task=ci/tasks/spec.yaml
 ```
 
 The build log streams back to your terminal line by line while it runs, the way
@@ -50,24 +50,24 @@ no token, and no request body limit to run into on a first push.
 ### The simple way: nothing to set up
 
 **If your key already reaches the machine, you can already push.** Git lets the
-client say what to run on the far side, so it runs forge directly:
+client say what to run on the far side, so it runs kranq directly:
 
 ```sh
-forge push ci/tasks/spec.yaml --repo dx     # FORGE_ENDPOINT=ssh://macmini@host:333
+kranq push ci/tasks/spec.yaml --repo dx     # KRANQ_ENDPOINT=ssh://macmini@host:333
 ```
 
 or with plain git, once per clone:
 
 ```sh
-git remote add forge ssh://macmini@host:333/dx.git
-git config remote.forge.receivepack '$HOME/.local/bin/forge git-receive'
-git push forge main:refs/heads/run -o task=ci/tasks/spec.yaml
+git remote add kranq ssh://macmini@host:333/dx.git
+git config remote.kranq.receivepack '$HOME/.local/bin/kranq git-receive'
+git push kranq main:refs/heads/run -o task=ci/tasks/spec.yaml
 ```
 
 The repository is created on the first push. Nothing is installed on the build
-machine beyond forge itself, and no forge-specific key exists.
+machine beyond kranq itself, and no kranq-specific key exists.
 
-`forge push` asks for this by default. `--receive-pack PATH` points at a forge
+`kranq push` asks for this by default. `--receive-pack PATH` points at a kranq
 installed somewhere else; `--receive-pack=""` turns it off for a key whose forced
 command already decides what runs.
 
@@ -78,13 +78,13 @@ already had. For a CI system that should be able to push and nothing else, give
 it its own key with a forced command:
 
 ```sh
-forge key add ci-laptop ~/path/to/pushkey.pub     # on the build machine
+kranq key add ci-laptop ~/path/to/pushkey.pub     # on the build machine
 ```
 
 That appends one line to `~/.ssh/authorized_keys`:
 
 ```
-restrict,command="/Users/macmini/.local/bin/forge git-receive --name ci-laptop" ssh-ed25519 AAAA… forge-key:ci-laptop
+restrict,command="/Users/macmini/.local/bin/kranq git-receive --name ci-laptop" ssh-ed25519 AAAA… kranq-key:ci-laptop
 ```
 
 `restrict` turns off agent forwarding, port forwarding, pty and X11 in one word;
@@ -97,12 +97,12 @@ command already confines the key to one program:
 
 ```
 $ ssh -i pushkey macmini@buildhost whoami
-forge: "whoami" is not a git command
+kranq: "whoami" is not a git command
 $ ssh -i pushkey macmini@buildhost 'cat ~/.ssh/id_ed25519'
-forge: "cat" is not allowed; this key may only push and fetch
+kranq: "cat" is not allowed; this key may only push and fetch
 ```
 
-`forge key add` only appends and `forge key rm` only removes lines carrying its
+`kranq key add` only appends and `kranq key rm` only removes lines carrying its
 own marker, because that file is usually how you administer the machine and
 losing a line locks you out.
 
@@ -110,21 +110,21 @@ losing a line locks you out.
 
 | | simple | forced-command key |
 | --- | --- | --- |
-| setup on the build machine | none | `forge key add` |
+| setup on the build machine | none | `kranq key add` |
 | what the pusher can do there | whatever their key already allowed | push and fetch, nothing else |
 | good for | you, from a laptop | a pipeline, a shared credential |
 
 ### Pinning the identity, when you have both
 
-A forge push key sits beside your ordinary key for the same host, and ssh offers
+A kranq push key sits beside your ordinary key for the same host, and ssh offers
 keys in its own order. `--ssh-key` sets `IdentitiesOnly`, or in `~/.ssh/config`:
 
 ```
-Host forge-mini
+Host kranq-mini
     HostName 142.127.69.2
     Port 333
     User macmini
-    IdentityFile ~/.ssh/forge_push
+    IdentityFile ~/.ssh/kranq_push
     IdentitiesOnly yes
 ```
 
@@ -137,16 +137,16 @@ A push to a name nothing has used yet creates it. On a machine that should only
 accept repositories somebody set up deliberately:
 
 ```sh
-forge config set FORGE_AUTO_CREATE_REPOS=false
+kranq config set KRANQ_AUTO_CREATE_REPOS=false
 ```
 
-Then an unknown name is refused, and `forge repo create <name>` is how one
-appears. `forge repo create` is also what makes a **plain path push** work,
-where git runs the real `git-receive-pack` and no forge code is in the loop to
+Then an unknown name is refused, and `kranq repo create <name>` is how one
+appears. `kranq repo create` is also what makes a **plain path push** work,
+where git runs the real `git-receive-pack` and no kranq code is in the loop to
 create anything:
 
 ```sh
-git push ssh://macmini@buildhost:333/Users/macmini/.forge/repos/dx.git \
+git push ssh://macmini@buildhost:333/Users/macmini/.kranq/repos/dx.git \
     -o task=ci/tasks/spec.yaml HEAD:refs/heads/run
 ```
 
@@ -160,9 +160,9 @@ brings a request body limit, so prefer ssh where you have the choice.
 ### On the build machine
 
 ```sh
-forge config set FORGE_HTTP_ADDR=127.0.0.1:8420
-forge daemon stop --force && forge daemon start
-forge token create ci-dx                    # printed once, stored only as a hash
+kranq config set KRANQ_HTTP_ADDR=127.0.0.1:8420
+kranq daemon stop --force && kranq daemon start
+kranq token create ci-dx                    # printed once, stored only as a hash
 cloudflared tunnel --url http://127.0.0.1:8420
 ```
 
@@ -173,19 +173,19 @@ reach the endpoint.
 ### From the caller
 
 ```sh
-export FORGE_ENDPOINT=https://ci.example.com
-export FORGE_TOKEN=forge_…
-forge push ci/tasks/spec.yaml --repo dx -e BITBUCKET_TOKEN
+export KRANQ_ENDPOINT=https://ci.example.com
+export KRANQ_TOKEN=kranq_…
+kranq push ci/tasks/spec.yaml --repo dx -e BITBUCKET_TOKEN
 ```
 
 or with plain git:
 
 ```sh
-git push "https://forge:$FORGE_TOKEN@ci.example.com/git/dx.git" \
+git push "https://kranq:$KRANQ_TOKEN@ci.example.com/git/dx.git" \
     -o task=ci/tasks/spec.yaml HEAD:refs/heads/run
 ```
 
-The token is the http password. `forge push` puts it in the URL's userinfo
+The token is the http password. `kranq push` puts it in the URL's userinfo
 rather than an argument, so it does not appear in the process list, and it is
 never defaulted into a flag, because usage output prints flag defaults.
 
@@ -220,15 +220,15 @@ already been accepted, and nothing it returns reaches git's exit status.
 So the hook prints a machine-readable line instead:
 
 ```
-FORGE-RESULT id=20260905T174031-bd4970a48ed775be status=failed exit=12
+KRANQ-RESULT id=20260905T174031-bd4970a48ed775be status=failed exit=12
 ```
 
-`forge push` reads it and exits with the task's own code. Use `forge push` in a
+`kranq push` reads it and exits with the task's own code. Use `kranq push` in a
 pipeline, and plain `git push` interactively. Or do it by hand:
 
 ```sh
-git push forge main -o task=ci/spec.yaml 2>&1 | tee /tmp/out
-grep -q 'FORGE-RESULT.*exit=0' /tmp/out
+git push kranq main -o task=ci/spec.yaml 2>&1 | tee /tmp/out
+grep -q 'KRANQ-RESULT.*exit=0' /tmp/out
 ```
 
 A push **is** refused, with a nonzero exit, when the request itself is wrong: no
@@ -258,9 +258,9 @@ no separate process can. So a job started there would find nothing.
 
 Validation lives in the first, the run in the second.
 
-**A commit under `refs/forge/*` is invisible to a plain clone**, which only looks
-at `refs/heads`. The clone then succeeds and produces an empty tree, so forge
-names each run's commit `refs/heads/forge/<task-id>`.
+**A commit under `refs/kranq/*` is invisible to a plain clone**, which only looks
+at `refs/heads`. The clone then succeeds and produces an empty tree, so kranq
+names each run's commit `refs/heads/kranq/<task-id>`.
 
 **Over http, output was not reaching the client as it was written.** Measured
 with a task printing a line every three seconds: over ssh the lines arrived three
@@ -275,7 +275,7 @@ let `/etc/../dx.git` quietly mean a repository called `etc`.
 ## The shape of it
 
 ```
-caller                     forge host                        VM
+caller                     kranq host                        VM
 ------                     ----------                        --
 git push ------------->  repos/<repo>.git
                          pre-receive: validate, or refuse
@@ -287,7 +287,7 @@ git push ------------->  repos/<repo>.git
 ```
 
 `origin` in the VM is repointed at the real git host, because only the *source*
-came from forge.
+came from kranq.
 
 <a name="troubleshooting"></a>
 
@@ -295,13 +295,13 @@ came from forge.
 
 | Symptom | Cause |
 | --- | --- |
-| `shallow update not allowed` | the repository predates `receive.shallowUpdate`; `forge repo rm <name>` and push again |
+| `shallow update not allowed` | the repository predates `receive.shallowUpdate`; `kranq repo rm <name>` and push again |
 | `Permission denied (publickey)` | the key is not installed, or ssh offered a different one — set `IdentitiesOnly yes` |
 | `"whoami" is not a git command` | expected: that key can only push and fetch |
 | `no task: push with -o task=…` | the required push option is missing |
 | `<path> is not in the pushed commit` | the spec is not at that path in what you pushed |
 | output arrives in clumps | a proxy in front of the endpoint is buffering; ssh has no proxy |
-| push accepted but exit 0 on a failing task | expected; use `forge push`, or grep for `FORGE-RESULT` |
+| push accepted but exit 0 on a failing task | expected; use `kranq push`, or grep for `KRANQ-RESULT` |
 | a huge first push over https fails | the tunnel's request body cap; use ssh |
 
 ## Limits worth knowing
@@ -311,4 +311,4 @@ came from forge.
   changed. **ssh has no such limit.**
 - Any valid credential can create a repository by pushing to a new name. That is
   by design: repositories are made on first push.
-- `forge repo ls` shows what has accumulated and `forge repo rm` clears one out.
+- `kranq repo ls` shows what has accumulated and `kranq repo rm` clears one out.

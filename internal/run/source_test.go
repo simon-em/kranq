@@ -23,8 +23,8 @@ func gitIn(t *testing.T, dir string, args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// A bare repository holding a commit under refs/forge/*, which is what a push
-// to forge actually leaves behind.
+// A bare repository holding a commit under refs/kranq/*, which is what a push
+// to kranq actually leaves behind.
 func pushedRepo(t *testing.T) (bare, commit string) {
 	t.Helper()
 	root := t.TempDir()
@@ -32,7 +32,7 @@ func pushedRepo(t *testing.T) (bare, commit string) {
 	gitIn(t, root, "init", "--bare", "--quiet", bare)
 	work := filepath.Join(root, "work")
 	gitIn(t, root, "init", "--quiet", work)
-	if err := os.WriteFile(filepath.Join(work, "Forgefile"), []byte("RUN true\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(work, "Kranqfile"), []byte("RUN true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(work, "MESSAGE"), []byte("only in the push\n"), 0o644); err != nil {
@@ -41,18 +41,18 @@ func pushedRepo(t *testing.T) (bare, commit string) {
 	gitIn(t, work, "add", "-A")
 	gitIn(t, work, "commit", "--quiet", "-m", "pushed")
 	commit = gitIn(t, work, "rev-parse", "HEAD")
-	gitIn(t, work, "push", "--quiet", bare, "HEAD:refs/forge/run")
+	gitIn(t, work, "push", "--quiet", bare, "HEAD:refs/kranq/run")
 	return bare, commit
 }
 
-// A plain clone only looks at refs/heads, so a commit sitting under refs/forge
+// A plain clone only looks at refs/heads, so a commit sitting under refs/kranq
 // clones into an empty tree without erroring. Staging has to fix that.
 func TestAPushedCommitIsInvisibleToAPlainCloneUntilStaged(t *testing.T) {
 	bare, _ := pushedRepo(t)
 	dest := filepath.Join(t.TempDir(), "naive")
 	gitIn(t, t.TempDir(), "clone", "--quiet", bare, dest)
 	if _, err := os.Stat(filepath.Join(dest, "MESSAGE")); err == nil {
-		t.Skip("this git clones refs/forge by default; staging is then belt and braces")
+		t.Skip("this git clones refs/kranq by default; staging is then belt and braces")
 	}
 }
 
@@ -86,7 +86,7 @@ func TestStageProducesARepoTheVMCanClone(t *testing.T) {
 func TestStagingIsSmallerThanTheSharedRepo(t *testing.T) {
 	bare, commit := pushedRepo(t)
 	for i := 0; i < 5; i++ {
-		gitIn(t, t.TempDir(), "--git-dir", bare, "update-ref", "refs/forge/extra"+string(rune('a'+i)), commit)
+		gitIn(t, t.TempDir(), "--git-dir", bare, "update-ref", "refs/kranq/extra"+string(rune('a'+i)), commit)
 	}
 	staged := filepath.Join(t.TempDir(), "src.git")
 	if _, err := Stage(context.Background(), Source{Bare: bare, Commit: commit}, "t-1", staged, nil); err != nil {
@@ -109,15 +109,15 @@ func TestCheckoutPushedNeedsNoNetwork(t *testing.T) {
 	if err := CheckoutPushed(context.Background(), bare, branch, dest, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dest, "Forgefile")); err != nil {
+	if _, err := os.Stat(filepath.Join(dest, "Kranqfile")); err != nil {
 		t.Fatalf("the host cannot read the project config: %v", err)
 	}
 }
 
-// Only the source came from forge. A task with effects pushes its branch and
+// Only the source came from kranq. A task with effects pushes its branch and
 // opens a pull request at the real remote, and the fence lives there too.
 func TestTheGuestCloneRepointsOriginAtTheRealRemote(t *testing.T) {
-	src := Source{Bare: "/tmp/x", Commit: "abc", Branch: "forge/t-1"}
+	src := Source{Bare: "/tmp/x", Commit: "abc", Branch: "kranq/t-1"}
 	cmd := src.CloneCommand(`"$HOME/work"`, Remote{Base: "git@bitbucket.org:effetmonstre", Repo: "dx"})
 	if !strings.Contains(cmd, GuestSource) {
 		t.Fatalf("the guest does not clone the copied source:\n%s", cmd)

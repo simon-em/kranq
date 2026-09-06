@@ -39,7 +39,7 @@ func TestRemoveFromProfileLeavesEverythingElse(t *testing.T) {
 		t.Fatal(err)
 	}
 	body, _ := os.ReadFile(profile)
-	if strings.Contains(string(body), "forge") || strings.Contains(string(body), "/opt/bin") {
+	if strings.Contains(string(body), "kranq") || strings.Contains(string(body), "/opt/bin") {
 		t.Errorf("uninstall left something behind:\n%s", body)
 	}
 	if !strings.Contains(string(body), "export EDITOR=vim") {
@@ -57,7 +57,7 @@ func TestRemoveFromAProfileWeNeverTouchedIsSafe(t *testing.T) {
 	}
 	body, _ := os.ReadFile(profile)
 	if string(body) != "export EDITOR=vim\n" {
-		t.Errorf("a profile with no forge block was modified:\n%q", body)
+		t.Errorf("a profile with no kranq block was modified:\n%q", body)
 	}
 	if err := RemoveFromProfile(filepath.Join(t.TempDir(), "absent"), io.Discard); err != nil {
 		t.Errorf("removing from a nonexistent profile should be a no-op, got %v", err)
@@ -123,7 +123,7 @@ func TestInstallingOverItselfIsANoOp(t *testing.T) {
 }
 
 func TestEnsureHomeCreatesItPrivate(t *testing.T) {
-	home := filepath.Join(t.TempDir(), "forge")
+	home := filepath.Join(t.TempDir(), "kranq")
 	if err := EnsureHome(home); err != nil {
 		t.Fatal(err)
 	}
@@ -137,7 +137,7 @@ func TestEnsureHomeCreatesItPrivate(t *testing.T) {
 }
 
 func TestEnsureHomeNarrowsAWideOne(t *testing.T) {
-	home := filepath.Join(t.TempDir(), "forge")
+	home := filepath.Join(t.TempDir(), "kranq")
 	if err := os.MkdirAll(home, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -151,12 +151,12 @@ func TestEnsureHomeNarrowsAWideOne(t *testing.T) {
 }
 
 func TestEnsureHomeRefusesAFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "forge")
+	path := filepath.Join(t.TempDir(), "kranq")
 	if err := os.WriteFile(path, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := EnsureHome(path); err == nil {
-		t.Fatal("a plain file was accepted as the forge home")
+		t.Fatal("a plain file was accepted as the kranq home")
 	}
 }
 

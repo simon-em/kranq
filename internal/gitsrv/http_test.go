@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/token"
+	"github.com/simon-em/kranq/internal/token"
 )
 
 type harness struct {
@@ -45,7 +45,7 @@ func mustGit(t *testing.T, dir string, args ...string) string {
 	return out
 }
 
-// A hook that records what it saw, standing in for `forge git-hook`.
+// A hook that records what it saw, standing in for `kranq git-hook`.
 const recordingHook = `#!/bin/sh
 {
   echo "PHASE $2"
@@ -59,7 +59,7 @@ const recordingHook = `#!/bin/sh
   echo "USER ${REMOTE_USER:-none}"
   while read -r old new ref; do echo "REF $ref $new"; done
 } >> HOOKLOG
-echo "forge: hook ran" >&2
+echo "kranq: hook ran" >&2
 exit 0
 `
 
@@ -76,13 +76,13 @@ func newHarness(t *testing.T) *harness {
 	root := t.TempDir()
 	h := &harness{t: t, hookLog: filepath.Join(root, "hooks.log")}
 
-	stub := filepath.Join(root, "forge-stub")
+	stub := filepath.Join(root, "kranq-stub")
 	body := strings.Replace(recordingHook, "HOOKLOG", h.hookLog, 1)
 	if err := os.WriteFile(stub, []byte(body), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
-	h.store = &Store{Root: filepath.Join(root, "repos"), ForgeBin: stub, SocketPath: "/tmp/forge.sock"}
+	h.store = &Store{Root: filepath.Join(root, "repos"), KranqBin: stub, SocketPath: "/tmp/kranq.sock"}
 
 	set := &token.Set{}
 	secret, err := set.Create("ci-dx", time.Now())
@@ -118,7 +118,7 @@ func newHarness(t *testing.T) *harness {
 }
 
 func (h *harness) url() string {
-	return strings.Replace(h.server.URL, "http://", "http://forge:"+h.secret+"@", 1) + "/dx.git"
+	return strings.Replace(h.server.URL, "http://", "http://kranq:"+h.secret+"@", 1) + "/dx.git"
 }
 
 func (h *harness) push(args ...string) (string, error) {
@@ -140,7 +140,7 @@ func TestAShallowCloneCanPush(t *testing.T) {
 	if got := mustGit(t, h.shallow, "rev-parse", "--is-shallow-repository"); strings.TrimSpace(got) != "true" {
 		t.Fatalf("the fixture is not shallow: %q", got)
 	}
-	out, err := h.push("-o", "task=ci/tasks/spec.yaml", "HEAD:refs/forge/run")
+	out, err := h.push("-o", "task=ci/tasks/spec.yaml", "HEAD:refs/kranq/run")
 	if err != nil {
 		t.Fatalf("a shallow push was refused: %v\n%s", err, out)
 	}
@@ -155,7 +155,7 @@ func TestPushOptionsReachTheHook(t *testing.T) {
 		"-o", "task=ci/tasks/spec.yaml",
 		"-o", "label=spec",
 		"-o", "env.BITBUCKET_TOKEN=s3cr3t",
-		"HEAD:refs/forge/run")
+		"HEAD:refs/kranq/run")
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
@@ -175,7 +175,7 @@ func TestPushOptionsReachTheHook(t *testing.T) {
 
 func TestTheHookLearnsWhichTokenPushed(t *testing.T) {
 	h := newHarness(t)
-	if out, err := h.push("-o", "task=t.yaml", "HEAD:refs/forge/run"); err != nil {
+	if out, err := h.push("-o", "task=t.yaml", "HEAD:refs/kranq/run"); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if !strings.Contains(h.hooks(), "USER ci-dx") {
@@ -185,30 +185,30 @@ func TestTheHookLearnsWhichTokenPushed(t *testing.T) {
 
 func TestTheHookSeesTheCommitThatWasPushed(t *testing.T) {
 	h := newHarness(t)
-	if out, err := h.push("-o", "task=t.yaml", "HEAD:refs/forge/run"); err != nil {
+	if out, err := h.push("-o", "task=t.yaml", "HEAD:refs/kranq/run"); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	sha := strings.TrimSpace(mustGit(t, h.shallow, "rev-parse", "HEAD"))
-	if !strings.Contains(h.hooks(), "REF refs/forge/run "+sha) {
+	if !strings.Contains(h.hooks(), "REF refs/kranq/run "+sha) {
 		t.Fatalf("the pushed sha did not reach the hook:\n%s", h.hooks())
 	}
 }
 
 func TestHookOutputReachesThePusher(t *testing.T) {
 	h := newHarness(t)
-	out, err := h.push("-o", "task=t.yaml", "HEAD:refs/forge/run")
+	out, err := h.push("-o", "task=t.yaml", "HEAD:refs/kranq/run")
 	if err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	// This is what makes a build log visible during `git push`.
-	if !strings.Contains(out, "forge: hook ran") {
+	if !strings.Contains(out, "kranq: hook ran") {
 		t.Fatalf("the hook's output did not stream back:\n%s", out)
 	}
 }
 
 func TestPushingWithNoTokenIsRefused(t *testing.T) {
 	h := newHarness(t)
-	out, err := git(t, h.shallow, "push", h.server.URL+"/dx.git", "HEAD:refs/forge/run")
+	out, err := git(t, h.shallow, "push", h.server.URL+"/dx.git", "HEAD:refs/kranq/run")
 	if err == nil {
 		t.Fatalf("an unauthenticated push succeeded:\n%s", out)
 	}
@@ -219,8 +219,8 @@ func TestPushingWithNoTokenIsRefused(t *testing.T) {
 
 func TestPushingWithAWrongTokenIsRefused(t *testing.T) {
 	h := newHarness(t)
-	bad := strings.Replace(h.server.URL, "http://", "http://forge:forge_deadbeef@", 1) + "/dx.git"
-	out, err := git(t, h.shallow, "push", bad, "HEAD:refs/forge/run")
+	bad := strings.Replace(h.server.URL, "http://", "http://kranq:kranq_deadbeef@", 1) + "/dx.git"
+	out, err := git(t, h.shallow, "push", bad, "HEAD:refs/kranq/run")
 	if err == nil {
 		t.Fatalf("a wrong token was accepted:\n%s", out)
 	}
@@ -239,14 +239,14 @@ func TestARevokedTokenStopsWorking(t *testing.T) {
 	}).Handler())
 	defer srv.Close()
 
-	url := strings.Replace(srv.URL, "http://", "http://forge:"+secret+"@", 1) + "/dx.git"
-	if out, err := git(t, h.shallow, "push", url, "HEAD:refs/forge/a"); err != nil {
+	url := strings.Replace(srv.URL, "http://", "http://kranq:"+secret+"@", 1) + "/dx.git"
+	if out, err := git(t, h.shallow, "push", url, "HEAD:refs/kranq/a"); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if err := set.Revoke("ci-dx"); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := git(t, h.shallow, "push", url, "HEAD:refs/forge/b"); err == nil {
+	if out, err := git(t, h.shallow, "push", url, "HEAD:refs/kranq/b"); err == nil {
 		t.Fatalf("a revoked token still pushed:\n%s", out)
 	}
 }
@@ -256,8 +256,8 @@ func TestATraversingRepoNameCannotReachAnything(t *testing.T) {
 	h := newHarness(t)
 	for _, path := range []string{"/../../../etc/passwd", "/..%2f..%2fetc"} {
 		out, err := git(t, h.shallow, "push",
-			strings.Replace(h.server.URL, "http://", "http://forge:"+h.secret+"@", 1)+path,
-			"HEAD:refs/forge/run")
+			strings.Replace(h.server.URL, "http://", "http://kranq:"+h.secret+"@", 1)+path,
+			"HEAD:refs/kranq/run")
 		if err == nil {
 			t.Fatalf("%q was served:\n%s", path, out)
 		}
@@ -269,7 +269,7 @@ func TestTheRepoIsCreatedOnFirstPush(t *testing.T) {
 	if _, err := os.Stat(h.store.Dir("dx")); err == nil {
 		t.Fatal("the repository existed before anything was pushed")
 	}
-	if out, err := h.push("-o", "task=t.yaml", "HEAD:refs/forge/run"); err != nil {
+	if out, err := h.push("-o", "task=t.yaml", "HEAD:refs/kranq/run"); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	if _, err := os.Stat(filepath.Join(h.store.Dir("dx"), "HEAD")); err != nil {
@@ -277,27 +277,27 @@ func TestTheRepoIsCreatedOnFirstPush(t *testing.T) {
 	}
 }
 
-// What forge does with the push: the tree at that commit has to be complete
+// What kranq does with the push: the tree at that commit has to be complete
 // even though the history behind it is not.
 func TestThePushedTreeIsCompleteAndClonable(t *testing.T) {
 	h := newHarness(t)
-	if err := os.WriteFile(filepath.Join(h.shallow, "Forgefile"), []byte("RUN true\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(h.shallow, "Kranqfile"), []byte("RUN true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	mustGit(t, h.shallow, "add", "-A")
 	mustGit(t, h.shallow, "commit", "--quiet", "-m", "add ci config")
 
-	if out, err := h.push("-o", "task=t.yaml", "HEAD:refs/heads/forge-run-1"); err != nil {
+	if out, err := h.push("-o", "task=t.yaml", "HEAD:refs/heads/kranq-run-1"); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 
 	dest := filepath.Join(t.TempDir(), "vm")
 	out, err := git(t, t.TempDir(), "clone", "--quiet", "--depth", "1",
-		"--branch", "forge-run-1", "file://"+h.store.Dir("dx"), dest)
+		"--branch", "kranq-run-1", "file://"+h.store.Dir("dx"), dest)
 	if err != nil {
 		t.Fatalf("a VM could not clone the pushed source: %v\n%s", err, out)
 	}
-	body, err := os.ReadFile(filepath.Join(dest, "Forgefile"))
+	body, err := os.ReadFile(filepath.Join(dest, "Kranqfile"))
 	if err != nil {
 		t.Fatalf("the tree is incomplete: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestTheHandlerItselfRefusesPathsThatEscapeTheStore(t *testing.T) {
 			t.Fatal(err)
 		}
 		req.URL.Opaque = raw
-		req.SetBasicAuth("forge", h.secret)
+		req.SetBasicAuth("kranq", h.secret)
 		resp, err := client.Do(req)
 		if err != nil {
 			continue
@@ -402,7 +402,7 @@ func TestABodyPastTheCapNeverReachesTheBackend(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.SetBasicAuth("forge", secret)
+	req.SetBasicAuth("kranq", secret)
 	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
 	if err == nil {
 		resp.Body.Close()
@@ -438,7 +438,7 @@ func TestOutputIsFlushedAsItIsWritten(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	req.SetBasicAuth("forge", secret)
+	req.SetBasicAuth("kranq", secret)
 	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
 	if err != nil {
 		t.Fatal(err)

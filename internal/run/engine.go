@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/effetmonstre/forge/internal/image"
-	"github.com/effetmonstre/forge/internal/project"
-	"github.com/effetmonstre/forge/internal/vm"
+	"github.com/simon-em/kranq/internal/image"
+	"github.com/simon-em/kranq/internal/project"
+	"github.com/simon-em/kranq/internal/vm"
 )
 
 const (
@@ -61,7 +61,7 @@ type Request struct {
 	Keep        KeepPolicy
 	Fence       *FencePlan
 	Source      Source
-	Forgefile   string
+	Kranqfile   string
 }
 
 type Result struct {
@@ -82,7 +82,7 @@ type Engine struct {
 
 func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res Result, err error) {
 
-	proj, err := project.Load(req.Checkout, req.Forgefile)
+	proj, err := project.Load(req.Checkout, req.Kranqfile)
 	if err != nil {
 		return res, err
 	}
@@ -112,8 +112,8 @@ func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res R
 	defer func() {
 		if req.Keep.keeps(res.ExitCode, failed) {
 			res.Kept = true
-			fmt.Fprintf(out, "keeping %s for inspection; `forge vm shell %s` to open it, "+
-				"`forge vm rm %s` when done\n", name, req.TaskID, name)
+			fmt.Fprintf(out, "keeping %s for inspection; `kranq vm shell %s` to open it, "+
+				"`kranq vm rm %s` when done\n", name, req.TaskID, name)
 			return
 		}
 		fmt.Fprintf(out, "destroying %s\n", name)
@@ -134,7 +134,7 @@ func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res R
 	if req.Source.Pushed() {
 		clone = req.Source.CloneCommand(work, remote)
 	}
-	script := fmt.Sprintf("set -euo pipefail\nrm -rf %s\n%s\ncd %s\nexec bash /tmp/forge-task.sh\n",
+	script := fmt.Sprintf("set -euo pipefail\nrm -rf %s\n%s\ncd %s\nexec bash /tmp/kranq-task.sh\n",
 		work, clone, work)
 
 	code, err := e.Driver.Shell(ctx, name, e.exports(req, held)+script, out)
@@ -167,23 +167,23 @@ func (e *Engine) exports(req Request, held *heldFence) string {
 		b = append(b, fmt.Sprintf("export %s=%s\n", k, shellQuote(env[k]))...)
 	}
 	if token := ResolveToken(req.Env); token != "" {
-		b = append(b, fmt.Sprintf("export FORGE_GIT_TOKEN=%s\n", shellQuote(token))...)
+		b = append(b, fmt.Sprintf("export KRANQ_GIT_TOKEN=%s\n", shellQuote(token))...)
 	}
 	return string(b)
 }
 
 func (e *Engine) upload(ctx context.Context, name string, req Request) error {
-	dir, err := os.MkdirTemp("", "forge-upload-*")
+	dir, err := os.MkdirTemp("", "kranq-upload-*")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(dir)
 
-	taskPath := filepath.Join(dir, "forge-task.sh")
+	taskPath := filepath.Join(dir, "kranq-task.sh")
 	if err := os.WriteFile(taskPath, []byte(req.Script), 0o700); err != nil {
 		return err
 	}
-	if err := e.Driver.CopyIn(ctx, name, taskPath, "/tmp/forge-task.sh", false); err != nil {
+	if err := e.Driver.CopyIn(ctx, name, taskPath, "/tmp/kranq-task.sh", false); err != nil {
 		return fmt.Errorf("uploading the task script: %w", err)
 	}
 	if req.Source.Pushed() {

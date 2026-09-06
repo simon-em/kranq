@@ -8,15 +8,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/jobproc"
-	"github.com/effetmonstre/forge/internal/state"
+	"github.com/simon-em/kranq/internal/jobproc"
+	"github.com/simon-em/kranq/internal/state"
 )
 
-// A stand-in for the forge binary: invoked as `<script> exec <id>`, so its
+// A stand-in for the kranq binary: invoked as `<script> exec <id>`, so its
 // command line looks to ps exactly like the real job process does.
 func fakeJob(t *testing.T, body string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "forge")
+	path := filepath.Join(t.TempDir(), "kranq")
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -47,7 +47,7 @@ func devnull(t *testing.T) *os.File {
 }
 
 func writeResultScript(dir string, code int, message string) string {
-	return "printf '{\"exit_code\":" + itoa(code) + ",\"vm_name\":\"forge-run-x\"" + message +
+	return "printf '{\"exit_code\":" + itoa(code) + ",\"vm_name\":\"kranq-run-x\"" + message +
 		"}\\n' > " + dir + "/result.json\n"
 }
 
@@ -225,7 +225,7 @@ func TestTheResultIsHandedBackForRecording(t *testing.T) {
 	if _, err := s.Execute(context.Background(), job("t-1"), "", devnull(t)); err != nil {
 		t.Fatal(err)
 	}
-	if got.VMName != "forge-run-x" {
+	if got.VMName != "kranq-run-x" {
 		t.Fatalf("the daemon was not told which VM ran the job: %+v", got)
 	}
 }

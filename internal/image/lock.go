@@ -6,7 +6,7 @@ import (
 	"syscall"
 )
 
-// Jobs run in separate `forge exec` processes, so an in-process mutex would let
+// Jobs run in separate `kranq exec` processes, so an in-process mutex would let
 // two of them build the same layer at once. The kernel releases a flock when
 // the process dies, so there is no stale-lock case to recover from.
 type lock struct{ f *os.File }

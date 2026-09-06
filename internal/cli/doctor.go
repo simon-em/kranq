@@ -11,13 +11,13 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/effetmonstre/forge/internal/deps"
-	"github.com/effetmonstre/forge/internal/doctor"
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/hostres"
-	"github.com/effetmonstre/forge/internal/image"
-	"github.com/effetmonstre/forge/internal/selfinstall"
-	"github.com/effetmonstre/forge/internal/state"
+	"github.com/simon-em/kranq/internal/deps"
+	"github.com/simon-em/kranq/internal/doctor"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/hostres"
+	"github.com/simon-em/kranq/internal/image"
+	"github.com/simon-em/kranq/internal/selfinstall"
+	"github.com/simon-em/kranq/internal/state"
 )
 
 // One image pair, base plus project layer, measured at about 24GiB on the mini.
@@ -65,7 +65,7 @@ func printChecks(env Env, checks []doctor.Check) {
 }
 
 func collect(ctx context.Context) []doctor.Check {
-	home := forgeHome()
+	home := kranqHome()
 	cfg := daemonConfig()
 	checks := []doctor.Check{
 		binaryCheck(),
@@ -95,32 +95,32 @@ func collect(ctx context.Context) []doctor.Check {
 func binaryCheck() doctor.Check {
 	self, err := os.Executable()
 	if err != nil {
-		return doctor.Check{Name: "forge", Level: doctor.Warn, Detail: "could not locate the running binary"}
+		return doctor.Check{Name: "kranq", Level: doctor.Warn, Detail: "could not locate the running binary"}
 	}
 	if resolved, err := filepath.EvalSymlinks(self); err == nil {
 		self = resolved
 	}
 	if selfinstall.OnPath(filepath.Dir(self)) {
-		return doctor.Check{Name: "forge", Level: doctor.OK, Detail: fmt.Sprintf("%s at %s", Version, self)}
+		return doctor.Check{Name: "kranq", Level: doctor.OK, Detail: fmt.Sprintf("%s at %s", Version, self)}
 	}
-	fix := "forge install"
+	fix := "kranq install"
 	detail := fmt.Sprintf("running %s from %s, which is not on PATH", Version, self)
-	if onPath, err := exec.LookPath("forge"); err == nil {
-		detail += fmt.Sprintf("; `forge` resolves to %s instead", onPath)
-		fix = "forge install, or run the copy already on PATH"
+	if onPath, err := exec.LookPath("kranq"); err == nil {
+		detail += fmt.Sprintf("; `kranq` resolves to %s instead", onPath)
+		fix = "kranq install, or run the copy already on PATH"
 	}
-	return doctor.Check{Name: "forge", Level: doctor.Warn, Detail: detail, Fix: fix}
+	return doctor.Check{Name: "kranq", Level: doctor.Warn, Detail: detail, Fix: fix}
 }
 
 func homeCheck(home string) doctor.Check {
 	info, err := os.Stat(home)
 	if err != nil {
 		return doctor.Check{
-			Name: "forge home", Level: doctor.Warn, Fix: "it is created on first use",
+			Name: "kranq home", Level: doctor.Warn, Fix: "it is created on first use",
 			Detail: fmt.Sprintf("%s does not exist yet", home),
 		}
 	}
-	return doctor.Permissions("forge home", home, info.Mode(), 0o700)
+	return doctor.Permissions("kranq home", home, info.Mode(), 0o700)
 }
 
 func envFileCheck(home string) doctor.Check {
@@ -154,7 +154,7 @@ func limaCheck(ctx context.Context, home string) doctor.Check {
 	}
 	if err := exec.CommandContext(ctx, bin, "list", "--format", "json").Run(); err != nil {
 		return doctor.Check{
-			Name: "lima", Level: doctor.Fail, Fix: "forge install",
+			Name: "lima", Level: doctor.Fail, Fix: "kranq install",
 			Detail: fmt.Sprintf("%s cannot list instances: %v", bin, err),
 		}
 	}
@@ -167,7 +167,7 @@ func limaCheck(ctx context.Context, home string) doctor.Check {
 func claudeCheck(token string) doctor.Check {
 	if token == "" {
 		return doctor.Check{
-			Name: "claude token", Level: doctor.Warn, Fix: "forge auth claude --stdin",
+			Name: "claude token", Level: doctor.Warn, Fix: "kranq auth claude --stdin",
 			Detail: "absent, so tasks with a claude step will be refused",
 		}
 	}

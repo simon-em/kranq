@@ -19,10 +19,10 @@ type Source struct {
 
 func (s Source) Pushed() bool { return s.Bare != "" && s.Commit != "" }
 
-// RunBranch is the ref forge creates for one run. A plain clone only looks at
-// refs/heads, so a commit sitting under refs/forge/* is invisible to it: the
+// RunBranch is the ref kranq creates for one run. A plain clone only looks at
+// refs/heads, so a commit sitting under refs/kranq/* is invisible to it: the
 // clone succeeds and produces an empty working tree.
-func RunBranch(taskID string) string { return "forge/" + taskID }
+func RunBranch(taskID string) string { return "kranq/" + taskID }
 
 type gitRunner func(ctx context.Context, dir string, args ...string) (string, error)
 
@@ -59,7 +59,7 @@ func Stage(ctx context.Context, src Source, taskID, dest string, git gitRunner) 
 	return branch, nil
 }
 
-// CheckoutPushed produces the working tree the host needs to read the Forgefile,
+// CheckoutPushed produces the working tree the host needs to read the Kranqfile,
 // without contacting the git host at all.
 func CheckoutPushed(ctx context.Context, bare, branch, dest string, git gitRunner) error {
 	if git == nil {
@@ -69,11 +69,11 @@ func CheckoutPushed(ctx context.Context, bare, branch, dest string, git gitRunne
 	return err
 }
 
-const GuestSource = "/tmp/forge-src.git"
+const GuestSource = "/tmp/kranq-src.git"
 
 // CloneCommand for a pushed source. origin is set to the real remote afterwards
 // because a task with effects pushes its branch and opens a pull request there,
-// and the fence lives there too; only the source came from forge.
+// and the fence lives there too; only the source came from kranq.
 func (s Source) CloneCommand(dest string, origin Remote) string {
 	// No --depth: the staged repository already holds exactly one commit, and
 	// git warns that the flag is ignored for a local clone anyway.

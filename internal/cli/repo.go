@@ -9,14 +9,14 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/gitsrv"
-	"github.com/effetmonstre/forge/internal/selfinstall"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/gitsrv"
+	"github.com/simon-em/kranq/internal/selfinstall"
 )
 
 func runRepo(env Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(env.Stderr, "usage: forge repo ls|create|rm")
+		fmt.Fprintln(env.Stderr, "usage: kranq repo ls|create|rm")
 		return exitcode.Usage
 	}
 	subs := map[string]func(Env, []string) int{
@@ -26,7 +26,7 @@ func runRepo(env Env, args []string) int {
 	}
 	sub, ok := subs[args[0]]
 	if !ok {
-		fmt.Fprintf(env.Stderr, "forge repo: unknown subcommand %q\n", args[0])
+		fmt.Fprintf(env.Stderr, "kranq repo: unknown subcommand %q\n", args[0])
 		return exitcode.Usage
 	}
 	return sub(env, args[1:])
@@ -37,7 +37,7 @@ func repoStore() *gitsrv.Store {
 	self, _ := os.Executable()
 	return &gitsrv.Store{
 		Root:       filepath.Join(cfg.Home, "repos"),
-		ForgeBin:   self,
+		KranqBin:   self,
 		SocketPath: cfg.SocketPath(),
 	}
 }
@@ -50,7 +50,7 @@ func repoList(env Env, args []string) int {
 		return exitcode.OK
 	}
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	var names []string
@@ -78,17 +78,17 @@ func repoList(env Env, args []string) int {
 // creates one on first push; a plain push to a path cannot.
 func repoCreate(env Env, args []string) int {
 	if len(args) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: forge repo create <name>")
+		fmt.Fprintln(env.Stderr, "usage: kranq repo create <name>")
 		return exitcode.Usage
 	}
-	if err := selfinstall.EnsureHome(forgeHome()); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+	if err := selfinstall.EnsureHome(kranqHome()); err != nil {
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	store := repoStore()
 	dir, err := store.Ensure(context.Background(), args[0])
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Usage
 	}
 	fmt.Fprintf(env.Stdout, "%s\n", dir)
@@ -100,20 +100,20 @@ func repoCreate(env Env, args []string) int {
 
 func repoRemove(env Env, args []string) int {
 	if len(args) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: forge repo rm <name>")
+		fmt.Fprintln(env.Stderr, "usage: kranq repo rm <name>")
 		return exitcode.Usage
 	}
 	if err := gitsrv.ValidRepo(args[0]); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Usage
 	}
 	dir := repoStore().Dir(args[0])
 	if _, err := os.Stat(dir); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: no repository called %q here\n", args[0])
+		fmt.Fprintf(env.Stderr, "kranq: no repository called %q here\n", args[0])
 		return exitcode.Misconfigured
 	}
 	if err := os.RemoveAll(dir); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	fmt.Fprintf(env.Stderr, "%s removed; the next push recreates it\n", args[0])

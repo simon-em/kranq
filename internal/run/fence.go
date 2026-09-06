@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/effetmonstre/forge/internal/fence"
+	"github.com/simon-em/kranq/internal/fence"
 )
 
 type FencePlan struct {
@@ -35,8 +35,8 @@ func (e *Engine) claimFence(ctx context.Context, req Request, remote Remote, out
 		if errors.Is(err, fence.ErrHeld) {
 			if entry, showErr := c.Show(ctx, req.Fence.Scope.Ref()); showErr == nil {
 				return nil, fmt.Errorf("%w, by %s since %s\n"+
-					"  forge fence show --repo %s %s\n"+
-					"  forge fence break --repo %s %s --yes   (only once you know that run is gone)",
+					"  kranq fence show --repo %s %s\n"+
+					"  kranq fence break --repo %s %s --yes   (only once you know that run is gone)",
 					fence.ErrHeld, entry.Holder.Task, entry.Holder.ClaimedAt.Format("2006-01-02 15:04 MST"),
 					req.Repo, entry.Ref, req.Repo, entry.Ref)
 			}
@@ -66,8 +66,8 @@ func (e *Engine) settleFence(ctx context.Context, h *heldFence, res *Result, out
 	if pushed && res.ExitCode != 0 {
 		res.FenceHeld = true
 		fmt.Fprintf(out, "this run pushed something and then failed, so %s is being held.\n"+
-			"  forge fence show --repo %s %s\n"+
-			"  forge fence break --repo %s %s --yes   (once you have checked what landed)\n",
+			"  kranq fence show --repo %s %s\n"+
+			"  kranq fence break --repo %s %s --yes   (once you have checked what landed)\n",
 			h.claim.Ref, h.repo, h.claim.Ref, h.repo, h.claim.Ref)
 		return
 	}
@@ -87,8 +87,8 @@ func (h *heldFence) env(taskID string) map[string]string {
 		return nil
 	}
 	return map[string]string{
-		"FORGE_FENCE_REF":    h.claim.Ref,
-		"FORGE_FENCE_TASK":   taskID,
-		"FORGE_FENCE_RECORD": string(body),
+		"KRANQ_FENCE_REF":    h.claim.Ref,
+		"KRANQ_FENCE_TASK":   taskID,
+		"KRANQ_FENCE_RECORD": string(body),
 	}
 }

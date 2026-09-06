@@ -25,7 +25,7 @@ func TestEnsureReusesAWorkingForwardedAgent(t *testing.T) {
 func TestEnsureExplainsItselfWhenThereIsNothingToUse(t *testing.T) {
 	t.Setenv("SSH_AUTH_SOCK", "")
 	t.Setenv("HOME", t.TempDir())
-	t.Setenv("FORGE_SSH_KEY_FILE", filepath.Join(t.TempDir(), "absent"))
+	t.Setenv("KRANQ_SSH_KEY_FILE", filepath.Join(t.TempDir(), "absent"))
 	_, err := Ensure(t.TempDir())
 	if err == nil {
 		t.Skip("this machine has an agent with identities in the ambient environment")
@@ -38,7 +38,7 @@ func TestEnsureExplainsItselfWhenThereIsNothingToUse(t *testing.T) {
 }
 
 func TestDefaultKeysPrefersAnExplicitOne(t *testing.T) {
-	t.Setenv("FORGE_SSH_KEY_FILE", "/custom/key")
+	t.Setenv("KRANQ_SSH_KEY_FILE", "/custom/key")
 	keys := DefaultKeys()
 	if len(keys) == 0 || keys[0] != "/custom/key" {
 		t.Errorf("DefaultKeys = %v, want the explicit key first", keys)

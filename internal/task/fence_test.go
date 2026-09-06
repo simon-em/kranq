@@ -24,7 +24,7 @@ func (f fenceRepo) git(dir string, args ...string) string {
 	cmd.Env = append(os.Environ(),
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
 		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t",
-		"FORGE_FENCE_BYPASS=1")
+		"KRANQ_FENCE_BYPASS=1")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		f.t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
@@ -48,7 +48,7 @@ func newFenceRepo(t *testing.T) fenceRepo {
 	return f
 }
 
-const testFenceRef = "refs/forge/fence/abc123"
+const testFenceRef = "refs/kranq/fence/abc123"
 
 // setFence puts the fence at a record naming task, the way the host's Claim does.
 func (f fenceRepo) setFence(task string) {
@@ -74,7 +74,7 @@ func (f fenceRepo) runScript(body string, env ...string) (string, error) {
 	cmd.Env = append(os.Environ(), append([]string{
 		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
 		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t",
-		"FORGE_FENCE_REF=" + testFenceRef,
+		"KRANQ_FENCE_REF=" + testFenceRef,
 	}, env...)...)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
@@ -82,28 +82,28 @@ func (f fenceRepo) runScript(body string, env ...string) (string, error) {
 
 func fenceEnv(task string) []string {
 	return []string{
-		"FORGE_FENCE_TASK=" + task,
-		"FORGE_FENCE_RECORD=" + fmt.Sprintf(`{"task":"%s","node":"host","phase":"pushed"}`, task),
+		"KRANQ_FENCE_TASK=" + task,
+		"KRANQ_FENCE_RECORD=" + fmt.Sprintf(`{"task":"%s","node":"host","phase":"pushed"}`, task),
 	}
 }
 
-func TestForgePushLandsWhileTheFenceIsHeld(t *testing.T) {
+func TestKranqPushLandsWhileTheFenceIsHeld(t *testing.T) {
 	f := newFenceRepo(t)
 	f.setFence("task-a")
-	out, err := f.runScript("forge_push HEAD:refs/heads/pr-one", fenceEnv("task-a")...)
+	out, err := f.runScript("kranq_push HEAD:refs/heads/pr-one", fenceEnv("task-a")...)
 	if err != nil {
-		t.Fatalf("forge_push failed while holding the fence: %v\n%s", err, out)
+		t.Fatalf("kranq_push failed while holding the fence: %v\n%s", err, out)
 	}
 	if !strings.Contains(f.remoteRefs(), "refs/heads/pr-one") {
 		t.Fatalf("the branch did not land:\n%s", f.remoteRefs())
 	}
 }
 
-func TestForgePushAdvancesTheFenceSoTheHostCanStillFindIt(t *testing.T) {
+func TestKranqPushAdvancesTheFenceSoTheHostCanStillFindIt(t *testing.T) {
 	f := newFenceRepo(t)
 	f.setFence("task-a")
 	before := f.git(f.checkout, "ls-remote", f.origin, testFenceRef)
-	if out, err := f.runScript("forge_push HEAD:refs/heads/pr-one", fenceEnv("task-a")...); err != nil {
+	if out, err := f.runScript("kranq_push HEAD:refs/heads/pr-one", fenceEnv("task-a")...); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	after := f.git(f.checkout, "ls-remote", f.origin, testFenceRef)
@@ -126,15 +126,15 @@ func TestRawGitPushIsBlocked(t *testing.T) {
 	if strings.Contains(f.remoteRefs(), "refs/heads/sneaky") {
 		t.Fatal("the unfenced branch landed")
 	}
-	if !strings.Contains(out, "forge_push") {
+	if !strings.Contains(out, "kranq_push") {
 		t.Fatalf("the refusal does not say what to do instead:\n%s", out)
 	}
 }
 
-func TestForgePushRefusesWhenAnotherRunHoldsTheFence(t *testing.T) {
+func TestKranqPushRefusesWhenAnotherRunHoldsTheFence(t *testing.T) {
 	f := newFenceRepo(t)
 	f.setFence("task-b")
-	out, err := f.runScript("forge_push HEAD:refs/heads/pr-one", fenceEnv("task-a")...)
+	out, err := f.runScript("kranq_push HEAD:refs/heads/pr-one", fenceEnv("task-a")...)
 	if err == nil {
 		t.Fatalf("pushed while another run held the fence:\n%s", out)
 	}
@@ -143,9 +143,9 @@ func TestForgePushRefusesWhenAnotherRunHoldsTheFence(t *testing.T) {
 	}
 }
 
-func TestForgePushRefusesWhenTheFenceIsGone(t *testing.T) {
+func TestKranqPushRefusesWhenTheFenceIsGone(t *testing.T) {
 	f := newFenceRepo(t)
-	out, err := f.runScript("forge_push HEAD:refs/heads/pr-one", fenceEnv("task-a")...)
+	out, err := f.runScript("kranq_push HEAD:refs/heads/pr-one", fenceEnv("task-a")...)
 	if err == nil {
 		t.Fatalf("pushed with no fence at all:\n%s", out)
 	}
@@ -156,17 +156,17 @@ func TestForgePushRefusesWhenTheFenceIsGone(t *testing.T) {
 
 // The window the fence exists to close: the fence is broken mid-run and the
 // original attempt, still alive, tries to push.
-func TestForgePushRefusesAfterTheFenceIsBrokenMidRun(t *testing.T) {
+func TestKranqPushRefusesAfterTheFenceIsBrokenMidRun(t *testing.T) {
 	f := newFenceRepo(t)
 	f.setFence("task-a")
-	if out, err := f.runScript("forge_push HEAD:refs/heads/pr-one", fenceEnv("task-a")...); err != nil {
+	if out, err := f.runScript("kranq_push HEAD:refs/heads/pr-one", fenceEnv("task-a")...); err != nil {
 		t.Fatalf("%v\n%s", err, out)
 	}
 	f.git(f.checkout, "push", "--quiet", "--delete", f.origin, testFenceRef)
 	f.setFence("task-b")
 
 	f.git(f.checkout, "commit", "--quiet", "--allow-empty", "-m", "more")
-	out, err := f.runScript("forge_push HEAD:refs/heads/pr-two", fenceEnv("task-a")...)
+	out, err := f.runScript("kranq_push HEAD:refs/heads/pr-two", fenceEnv("task-a")...)
 	if err == nil {
 		t.Fatalf("the original attempt pushed again after being fenced out:\n%s", out)
 	}
@@ -177,11 +177,11 @@ func TestForgePushRefusesAfterTheFenceIsBrokenMidRun(t *testing.T) {
 
 func TestFencePreambleOnlyAppearsForEffectfulTasks(t *testing.T) {
 	plain := Spec{Name: "t", Steps: []Step{{Run: "true"}}}
-	if strings.Contains(BuildScript(plain, nil), "forge_push") {
+	if strings.Contains(BuildScript(plain, nil), "kranq_push") {
 		t.Fatal("a task with no declared effects got the fence helpers")
 	}
 	effectful := Spec{Name: "t", Effects: Effects{Push: true}, Steps: []Step{{Run: "true"}}}
-	if !strings.Contains(BuildScript(effectful, nil), "forge_push") {
+	if !strings.Contains(BuildScript(effectful, nil), "kranq_push") {
 		t.Fatal("a task declaring effects.push did not get the fence helpers")
 	}
 }

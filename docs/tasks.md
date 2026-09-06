@@ -1,7 +1,7 @@
 # Writing a task
 
 A task is one YAML file. It is compiled to a single bash script and run inside a
-disposable VM cloned from the project's image. `forge render <task.yaml>` prints
+disposable VM cloned from the project's image. `kranq render <task.yaml>` prints
 that script, which is the fastest way to understand what a spec does.
 
 ```yaml
@@ -81,7 +81,7 @@ because the gate is keyed by a hash of the token.
 ## Effects, for a task that changes something
 
 A task that pushes a branch and opens a pull request must do it at most once,
-even if forge loses track of the machine running it.
+even if kranq loses track of the machine running it.
 
 ```yaml
 effects:
@@ -92,9 +92,9 @@ effects:
 
 With this set, two things change inside the VM:
 
-- `forge_push <refspec>...` becomes available. It ties the push to the run's
+- `kranq_push <refspec>...` becomes available. It ties the push to the run's
   fence in one atomic push, so it lands only if the fence is still ours.
-- a plain `git push` **fails**, with an error naming `forge_push`. Without that
+- a plain `git push` **fails**, with an error naming `kranq_push`. Without that
   the helper would be advisory and one stray push would bypass the whole thing.
 
 See [fence.md](fence.md) for what that protects against and what it does not.
@@ -115,17 +115,17 @@ Three sources, later winning:
 2. `-e NAME=VALUE`, or bare `-e NAME` to forward it from the caller
 3. `CLAUDE_CODE_OAUTH_TOKEN`, injected when the task has a Claude step
 
-A forwarded `BITBUCKET_TOKEN` (or `FORGE_GIT_TOKEN`, `BITBUCKET_API_TOKEN`,
+A forwarded `BITBUCKET_TOKEN` (or `KRANQ_GIT_TOKEN`, `BITBUCKET_API_TOKEN`,
 `BITBUCKET_STEP_OAUTH_TOKEN`) also becomes the checkout credential: the VM clones
 over https with it instead of needing a forwarded ssh agent. That is what lets a
 task run with no ambient ssh setup at all.
 
 Secrets are stored in a separate `secrets.json` in the task directory, so
-`forge ps`, `forge status` and any diagnostic dump structurally cannot include them.
+`kranq ps`, `kranq status` and any diagnostic dump structurally cannot include them.
 
 ## The project's own configuration
 
-Each repository supplies a `Forgefile` at its root describing the environment its
+Each repository supplies a `Kranqfile` at its root describing the environment its
 jobs run in. It reads like a Dockerfile, and each `RUN` is a layer:
 
 ```
@@ -144,11 +144,11 @@ identity is its parent plus its command plus the contents of the files it copies
 and carries no repository name, so two projects doing identical work share the
 layer. Full detail in [build.md](build.md).
 
-A task can name a different Forgefile, and `--forgefile` overrides that:
+A task can name a different Kranqfile, and `--kranqfile` overrides that:
 
 ```yaml
 name: perf
-forgefile: Forgefile.perf
+kranqfile: Kranqfile.perf
 ```
 
 ## Artifacts

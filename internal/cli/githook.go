@@ -11,13 +11,13 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/gitsrv"
-	"github.com/effetmonstre/forge/internal/ipc"
-	"github.com/effetmonstre/forge/internal/task"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/gitsrv"
+	"github.com/simon-em/kranq/internal/ipc"
+	"github.com/simon-em/kranq/internal/task"
 )
 
-// forge git-hook is invoked by the hooks forge writes into each pushed-to
+// kranq git-hook is invoked by the hooks kranq writes into each pushed-to
 // repository. It is split across two phases because git splits them:
 //
 //   - pre-receive can reject the push, but the pushed objects are quarantined
@@ -36,7 +36,7 @@ func runGitHook(env Env, args []string) int {
 		return exitcode.Usage
 	}
 	if len(rest) != 1 || *repo == "" {
-		fmt.Fprintln(env.Stderr, "usage: forge git-hook <pre-receive|post-receive> --repo NAME --socket PATH")
+		fmt.Fprintln(env.Stderr, "usage: kranq git-hook <pre-receive|post-receive> --repo NAME --socket PATH")
 		return exitcode.Usage
 	}
 
@@ -52,7 +52,7 @@ func runGitHook(env Env, args []string) int {
 		}
 		return hookRun(env, *repo, *socket, req, updates)
 	}
-	fmt.Fprintf(env.Stderr, "forge: unknown hook phase %q\n", rest[0])
+	fmt.Fprintf(env.Stderr, "kranq: unknown hook phase %q\n", rest[0])
 	return exitcode.Usage
 }
 
@@ -91,18 +91,18 @@ func branchFromRef(ref string) string {
 	if head, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
 		return head
 	}
-	return "forge-push"
+	return "kranq-push"
 }
 
 // Everything printed here reaches the pushing terminal prefixed with "remote:".
 func say(env Env, format string, args ...any) {
-	fmt.Fprintf(env.Stderr, "forge: "+format+"\n", args...)
+	fmt.Fprintf(env.Stderr, "kranq: "+format+"\n", args...)
 }
 
 func hookValidate(env Env, req gitsrv.Request, parseErr error, updates []update) int {
 	if parseErr != nil {
 		say(env, "%v", parseErr)
-		say(env, "for example: git push forge HEAD:refs/forge/run -o task=ci/tasks/spec.yaml")
+		say(env, "for example: git push kranq HEAD:refs/kranq/run -o task=ci/tasks/spec.yaml")
 		return exitcode.InvalidSpec
 	}
 	live := 0
@@ -203,7 +203,7 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 	say(env, "task %s queued from %s", task.ID, commit[:12])
 
 	if req.Detach {
-		say(env, "detached; follow it with: forge logs %s -f", task.ID)
+		say(env, "detached; follow it with: kranq logs %s -f", task.ID)
 		return exitcode.OK
 	}
 	// The push cannot carry the task's exit code, so the client checks the
@@ -219,7 +219,7 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 	say(env, "task %s %s (exit %d)", task.ID, final.Status, final.ExitCode)
 	// A push cannot carry an exit code: post-receive runs after the ref has
 	// already been accepted, and nothing it returns reaches git's exit status.
-	// This line is the contract instead, and `forge push` exits on it.
+	// This line is the contract instead, and `kranq push` exits on it.
 	fmt.Fprintf(env.Stderr, "%s id=%s status=%s exit=%d\n",
 		gitsrv.ResultMarker, final.ID, final.Status, final.ExitCode)
 	return exitcode.OK

@@ -11,30 +11,30 @@ import (
 	"strings"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/gitsrv"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/gitsrv"
 )
 
-// forge push sends the working repository to forge and runs a task against
+// kranq push sends the working repository to kranq and runs a task against
 // exactly what was sent. Nothing is cloned from the git host, so no credential
 // is needed to read the code, and uncommitted history that exists only here
 // still runs.
 func runPush(env Env, args []string) int {
 	fs := flag.NewFlagSet("push", flag.ContinueOnError)
 	fs.SetOutput(env.Stderr)
-	endpoint := fs.String("endpoint", envOr("FORGE_ENDPOINT"), "https://... where forge receives pushes")
+	endpoint := fs.String("endpoint", envOr("KRANQ_ENDPOINT"), "https://... where kranq receives pushes")
 	// Deliberately not defaulted from the environment here: flag.PrintDefaults
 	// prints a flag's default value, and usage is printed on every misuse, so
 	// the token would end up in the terminal and in CI logs.
-	tok := fs.String("token", "", "a forge token (default: $FORGE_TOKEN)")
-	repo := fs.String("repo", envOr("FORGE_REPO", "CI_REPO", "BITBUCKET_REPO_SLUG"), "repository name on the runner")
+	tok := fs.String("token", "", "a kranq token (default: $KRANQ_TOKEN)")
+	repo := fs.String("repo", envOr("KRANQ_REPO", "CI_REPO", "BITBUCKET_REPO_SLUG"), "repository name on the runner")
 	branch := fs.String("branch", envOr("CI_BRANCH", "BITBUCKET_BRANCH"), "branch name to report for this run")
 	label := fs.String("label", "", "label for the VM and artifacts")
 	keep := fs.String("keep-vm", "", "keep the job VM: never, on-failure, always")
 	rev := fs.String("rev", "HEAD", "what to send")
-	sshKey := fs.String("ssh-key", envOr("FORGE_SSH_KEY"), "identity to push with, for an ssh:// endpoint")
-	receivePack := fs.String("receive-pack", orElse(envOr("FORGE_RECEIVE_PACK"), defaultReceivePack),
-		"forge on the far side, so no forge-specific ssh key is needed")
+	sshKey := fs.String("ssh-key", envOr("KRANQ_SSH_KEY"), "identity to push with, for an ssh:// endpoint")
+	receivePack := fs.String("receive-pack", orElse(envOr("KRANQ_RECEIVE_PACK"), defaultReceivePack),
+		"kranq on the far side, so no kranq-specific ssh key is needed")
 	detach := fs.Bool("detach", false, "queue it and return without following")
 	forward := envFlag{}
 	fs.Var(forward, "env", "NAME=VALUE, or bare NAME to forward it from this environment")
@@ -44,30 +44,30 @@ func runPush(env Env, args []string) int {
 		return exitcode.Usage
 	}
 	if len(positional) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: forge push <task.yaml> [flags]")
+		fmt.Fprintln(env.Stderr, "usage: kranq push <task.yaml> [flags]")
 		fs.PrintDefaults()
 		return exitcode.Usage
 	}
 	if *tok == "" {
-		*tok = envOr("FORGE_TOKEN")
+		*tok = envOr("KRANQ_TOKEN")
 	}
 	if *endpoint == "" {
-		fmt.Fprintln(env.Stderr, "forge: set --endpoint (or FORGE_ENDPOINT)")
+		fmt.Fprintln(env.Stderr, "kranq: set --endpoint (or KRANQ_ENDPOINT)")
 		return exitcode.Misconfigured
 	}
 	// An ssh endpoint authenticates with a key, so it needs no token at all.
 	if *tok == "" && !isSSH(*endpoint) {
-		fmt.Fprintln(env.Stderr, "forge: set --token (or FORGE_TOKEN), or use an ssh:// endpoint")
+		fmt.Fprintln(env.Stderr, "kranq: set --token (or KRANQ_TOKEN), or use an ssh:// endpoint")
 		return exitcode.Misconfigured
 	}
 	if *repo == "" {
-		fmt.Fprintln(env.Stderr, "forge: set --repo (or CI_REPO)")
+		fmt.Fprintln(env.Stderr, "kranq: set --repo (or CI_REPO)")
 		return exitcode.Misconfigured
 	}
 
 	target, err := pushURL(*endpoint, *repo, *tok)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Misconfigured
 	}
 
@@ -79,7 +79,7 @@ func runPush(env Env, args []string) int {
 	if spec, err := os.ReadFile(positional[0]); err == nil {
 		encoded, encErr := gitsrv.EncodeSpec(spec)
 		if encErr != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", encErr)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", encErr)
 			return exitcode.InternalError
 		}
 		options = append(options, "-o", "spec="+encoded)
@@ -97,8 +97,8 @@ func runPush(env Env, args []string) int {
 	}
 
 	args = []string{"push", "--force"}
-	// Asking for forge as the receive-pack is what lets an ordinary ssh key
-	// push: git runs forge on the far side itself, so nothing has to be set up
+	// Asking for kranq as the receive-pack is what lets an ordinary ssh key
+	// push: git runs kranq on the far side itself, so nothing has to be set up
 	// there first. A forced-command key ignores this and still works.
 	if isSSH(*endpoint) && *receivePack != "" {
 		args = append(args, "--receive-pack="+*receivePack+" git-receive")
@@ -133,7 +133,7 @@ func runPush(env Env, args []string) int {
 	case *detach:
 		return exitcode.OK
 	}
-	fmt.Fprintln(env.Stderr, "forge: the push was accepted but no result came back; the run may still be going")
+	fmt.Fprintln(env.Stderr, "kranq: the push was accepted but no result came back; the run may still be going")
 	return exitcode.Unreachable
 }
 
@@ -146,16 +146,16 @@ func runPush(env Env, args []string) int {
 func pushRef() string {
 	var nonce [8]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
-		return fmt.Sprintf("refs/forge/push/%d", time.Now().UnixNano())
+		return fmt.Sprintf("refs/kranq/push/%d", time.Now().UnixNano())
 	}
-	return fmt.Sprintf("refs/forge/push/%s-%x", time.Now().UTC().Format("20060102T150405"), nonce)
+	return fmt.Sprintf("refs/kranq/push/%s-%x", time.Now().UTC().Format("20060102T150405"), nonce)
 }
 
 func refusalCode(output string) int {
 	lower := strings.ToLower(output)
 	for _, marker := range []string{
 		// http
-		"authentication failed", "a forge token is required", "401",
+		"authentication failed", "a kranq token is required", "401",
 		// ssh
 		"permission denied (publickey)", "could not read from remote repository",
 		"this key may only push and fetch", "it has no shell",
@@ -189,7 +189,7 @@ func pushURL(endpoint, repo, secret string) (string, error) {
 	if secret == "" {
 		return "", fmt.Errorf("an %s endpoint needs a token", u.Scheme)
 	}
-	u.User = url.UserPassword("forge", secret)
+	u.User = url.UserPassword("kranq", secret)
 	if !strings.HasSuffix(u.Path, "/git") {
 		u.Path = strings.TrimSuffix(u.Path, "/") + "/git"
 	}
@@ -199,10 +199,10 @@ func pushURL(endpoint, repo, secret string) (string, error) {
 
 func isSSH(endpoint string) bool { return strings.HasPrefix(endpoint, "ssh://") }
 
-// Where forge installs itself. Overridable for a machine that put it elsewhere,
+// Where kranq installs itself. Overridable for a machine that put it elsewhere,
 // and clearable with --receive-pack="" for a key whose forced command already
 // decides what runs.
-const defaultReceivePack = "$HOME/.local/bin/forge"
+const defaultReceivePack = "$HOME/.local/bin/kranq"
 
 func orElse(value, fallback string) string {
 	if value != "" {

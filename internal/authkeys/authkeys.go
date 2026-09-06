@@ -16,10 +16,10 @@ var (
 	ErrExists   = errors.New("a key by that name is already installed")
 )
 
-// The marker sits in the comment field, which ssh ignores, so a forge entry is
+// The marker sits in the comment field, which ssh ignores, so a kranq entry is
 // identifiable without a parallel file that could drift out of step with this
 // one.
-const Marker = "forge-key:"
+const Marker = "kranq-key:"
 
 var namePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,31}$`)
 
@@ -69,7 +69,7 @@ func ParsePublicKey(line string) (Key, error) {
 		return k, errors.New("that is a private key; pass the .pub file instead")
 	}
 	if !keyTypes[fields[0]] {
-		return k, fmt.Errorf("%q is not a key type forge accepts; use an ed25519 key", fields[0])
+		return k, fmt.Errorf("%q is not a key type kranq accepts; use an ed25519 key", fields[0])
 	}
 	if _, err := base64.StdEncoding.DecodeString(fields[1]); err != nil {
 		return k, errors.New("the key data is not valid base64")
@@ -101,7 +101,7 @@ func markerOf(line string) (string, bool) {
 	return name, true
 }
 
-// Add returns the new file content. Lines forge did not write are returned
+// Add returns the new file content. Lines kranq did not write are returned
 // untouched, in order: this file usually holds the key someone administers the
 // machine with, and losing it locks them out.
 func Add(content string, k Key, name, command string) (string, error) {
@@ -191,7 +191,7 @@ func Write(path, content string) error {
 	if err := os.Chmod(dir, 0o700); err != nil {
 		return err
 	}
-	tmp := path + ".forge-tmp"
+	tmp := path + ".kranq-tmp"
 	if err := os.WriteFile(tmp, []byte(content), 0o600); err != nil {
 		return err
 	}

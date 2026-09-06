@@ -7,10 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/effetmonstre/forge/internal/daemon"
-	"github.com/effetmonstre/forge/internal/deps"
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/selfinstall"
+	"github.com/simon-em/kranq/internal/daemon"
+	"github.com/simon-em/kranq/internal/deps"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/selfinstall"
 )
 
 func runInstall(env Env, args []string) int {
@@ -26,22 +26,22 @@ func runInstall(env Env, args []string) int {
 		return exitcode.Usage
 	}
 
-	home := forgeHome()
+	home := kranqHome()
 	if err := selfinstall.EnsureHome(home); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
-	// A package manager owns the binary and PATH when it installed forge, so
+	// A package manager owns the binary and PATH when it installed kranq, so
 	// copying it somewhere else would leave two copies that upgrade separately.
 	binary, err := os.Executable()
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	if !*depsOnly {
 		binary, err = selfinstall.InstallBinary(*prefix, env.Stderr)
 		if err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.InternalError
 		}
 	}
@@ -50,13 +50,13 @@ func runInstall(env Env, args []string) int {
 		shell := os.Getenv("SHELL")
 		profile, err := selfinstall.ProfileFor(shell)
 		if err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.InternalError
 		}
 		if selfinstall.OnPath(*prefix) {
 			fmt.Fprintf(env.Stderr, "%s is already on PATH\n", *prefix)
 		} else if err := selfinstall.AddToProfile(profile, *prefix, shell, env.Stderr); err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.InternalError
 		} else {
 			fmt.Fprintf(env.Stderr, "open a new shell, or run: %s\n",
@@ -74,7 +74,7 @@ func runInstall(env Env, args []string) int {
 		if lima.Installed() {
 			fmt.Fprintf(env.Stderr, "lima %s already installed at %s\n", deps.LimaVersion, lima.Binary())
 		} else if err := lima.Install(env.Stderr); err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.MissingDep
 		}
 	}
@@ -82,18 +82,18 @@ func runInstall(env Env, args []string) int {
 	if *withDaemon {
 		svc := selfinstall.Service{Binary: binary, Home: home, Path: os.Getenv("PATH")}
 		if err := svc.Install(env.Stderr); err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.InternalError
 		}
 	}
 
-	fmt.Fprintf(env.Stderr, "\nforge is installed. State lives in %s\n", home)
+	fmt.Fprintf(env.Stderr, "\nkranq is installed. State lives in %s\n", home)
 	if !*withDaemon {
-		fmt.Fprintln(env.Stderr, "the daemon starts on demand; `forge install --with-daemon` makes it permanent")
+		fmt.Fprintln(env.Stderr, "the daemon starts on demand; `kranq install --with-daemon` makes it permanent")
 	}
 	if _, err := daemon.LoadEnv(home); err == nil {
 		if e, _ := daemon.LoadEnv(home); e["CLAUDE_CODE_OAUTH_TOKEN"] == "" {
-			fmt.Fprintln(env.Stderr, "claude tasks need a token: `forge auth claude --stdin < token.txt`")
+			fmt.Fprintln(env.Stderr, "claude tasks need a token: `kranq auth claude --stdin < token.txt`")
 		}
 	}
 	return exitcode.OK
@@ -106,13 +106,13 @@ func runUninstall(env Env, args []string) int {
 	if _, err := parsePermuted(fs, args); err != nil {
 		return exitcode.Usage
 	}
-	home := forgeHome()
+	home := kranqHome()
 	if client, _ := connect(env, false); client != nil {
-		fmt.Fprintln(env.Stderr, "forge: the daemon is running; stop it first with `forge daemon stop`")
+		fmt.Fprintln(env.Stderr, "kranq: the daemon is running; stop it first with `kranq daemon stop`")
 		return exitcode.Misconfigured
 	}
 	if err := selfinstall.Uninstall(env.Stderr); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 	}
 	shell := os.Getenv("SHELL")
 	if profile, err := selfinstall.ProfileFor(shell); err == nil {
@@ -120,7 +120,7 @@ func runUninstall(env Env, args []string) int {
 	}
 	if *purge {
 		if err := os.RemoveAll(home); err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.InternalError
 		}
 		fmt.Fprintf(env.Stderr, "removed %s\n", home)
@@ -132,7 +132,7 @@ func runUninstall(env Env, args []string) int {
 
 func runAuth(env Env, args []string) int {
 	if len(args) == 0 || args[0] != "claude" {
-		fmt.Fprintln(env.Stderr, "usage: forge auth claude [--stdin | --show]")
+		fmt.Fprintln(env.Stderr, "usage: kranq auth claude [--stdin | --show]")
 		return exitcode.Usage
 	}
 	fs := flag.NewFlagSet("auth claude", flag.ContinueOnError)
@@ -143,13 +143,13 @@ func runAuth(env Env, args []string) int {
 	if _, err := parsePermuted(fs, args[1:]); err != nil {
 		return exitcode.Usage
 	}
-	home := forgeHome()
+	home := kranqHome()
 
 	switch {
 	case *show:
 		stored, err := daemon.LoadEnv(home)
 		if err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.InternalError
 		}
 		token := stored["CLAUDE_CODE_OAUTH_TOKEN"]
@@ -162,7 +162,7 @@ func runAuth(env Env, args []string) int {
 		return exitcode.OK
 	case *clear:
 		if err := daemon.SetEnv(home, "CLAUDE_CODE_OAUTH_TOKEN", ""); err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.InternalError
 		}
 		fmt.Fprintln(env.Stderr, "token removed; restart the daemon for it to take effect")
@@ -170,23 +170,23 @@ func runAuth(env Env, args []string) int {
 	case *stdin:
 		raw, err := io.ReadAll(os.Stdin)
 		if err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.InternalError
 		}
 		token := strings.TrimSpace(string(raw))
 		if token == "" {
-			fmt.Fprintln(env.Stderr, "forge: nothing on stdin")
+			fmt.Fprintln(env.Stderr, "kranq: nothing on stdin")
 			return exitcode.Usage
 		}
 		if err := daemon.SetEnv(home, "CLAUDE_CODE_OAUTH_TOKEN", token); err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.InternalError
 		}
 		fmt.Fprintf(env.Stderr, "stored a %d character token (fingerprint %s) in %s\n",
 			len(token), fingerprint(token), daemon.EnvPath(home))
-		fmt.Fprintln(env.Stderr, "restart the daemon for it to take effect: `forge daemon stop`")
+		fmt.Fprintln(env.Stderr, "restart the daemon for it to take effect: `kranq daemon stop`")
 		return exitcode.OK
 	}
-	fmt.Fprintln(env.Stderr, "usage: forge auth claude [--stdin | --show | --clear]")
+	fmt.Fprintln(env.Stderr, "usage: kranq auth claude [--stdin | --show | --clear]")
 	return exitcode.Usage
 }

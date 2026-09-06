@@ -8,11 +8,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/jobproc"
-	"github.com/effetmonstre/forge/internal/state"
+	"github.com/simon-em/kranq/internal/jobproc"
+	"github.com/simon-em/kranq/internal/state"
 )
 
-// Supervisor runs each job as `forge exec <id>` in its own process group, so a
+// Supervisor runs each job as `kranq exec <id>` in its own process group, so a
 // daemon restart neither kills the job nor loses its result. It never does the
 // work itself; everything it knows about a job comes from the store and the
 // result file the child writes.
@@ -48,7 +48,7 @@ func (s *Supervisor) Execute(ctx context.Context, t state.Task, script string, o
 	cmd.Dir = dir
 	cmd.Stdout = out
 	cmd.Stderr = out
-	cmd.Env = append(os.Environ(), "FORGE_HOME="+s.Home)
+	cmd.Env = append(os.Environ(), "KRANQ_HOME="+s.Home)
 	// Its own group, so a SIGKILL of the daemon orphans the job rather than
 	// killing it, and so cancelling can signal the group rather than the leader.
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

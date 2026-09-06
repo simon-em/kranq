@@ -25,7 +25,7 @@ func TestCloneUsesHttpsWhenATokenWasForwarded(t *testing.T) {
 	if strings.Contains(got, "secret") {
 		t.Errorf("the token must never appear in argv, it goes through the env: %q", got)
 	}
-	if !strings.Contains(got, "$FORGE_GIT_TOKEN") {
+	if !strings.Contains(got, "$KRANQ_GIT_TOKEN") {
 		t.Errorf("the helper must read the token from the env: %q", got)
 	}
 	if !strings.Contains(got, "--branch 'ci/lima'") {
@@ -38,12 +38,12 @@ func TestResolveTokenPrefersTheMostSpecific(t *testing.T) {
 		"BITBUCKET_STEP_OAUTH_TOKEN": "step",
 		"BITBUCKET_API_TOKEN":        "api",
 		"BITBUCKET_TOKEN":            "repo",
-		"FORGE_GIT_TOKEN":            "forge",
+		"KRANQ_GIT_TOKEN":            "kranq",
 	}
-	if got := ResolveToken(all); got != "forge" {
-		t.Errorf("ResolveToken = %q, want the explicit forge one first", got)
+	if got := ResolveToken(all); got != "kranq" {
+		t.Errorf("ResolveToken = %q, want the explicit kranq one first", got)
 	}
-	delete(all, "FORGE_GIT_TOKEN")
+	delete(all, "KRANQ_GIT_TOKEN")
 	if got := ResolveToken(all); got != "repo" {
 		t.Errorf("ResolveToken = %q, want BITBUCKET_TOKEN next", got)
 	}

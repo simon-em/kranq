@@ -40,8 +40,8 @@ func TestParseTargetRejectsTypos(t *testing.T) {
 
 func TestSSHArgsCarryThePortAndFailFast(t *testing.T) {
 	target, _ := ParseTarget("macmini@host:333")
-	got := target.SSHArgs("forge", "version")
-	want := []string{"-o", "BatchMode=yes", "-p", "333", "macmini@host", "forge", "version"}
+	got := target.SSHArgs("kranq", "version")
+	want := []string{"-o", "BatchMode=yes", "-p", "333", "macmini@host", "kranq", "version"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
@@ -53,8 +53,8 @@ func TestSSHArgsCarryThePortAndFailFast(t *testing.T) {
 
 func TestSCPArgsUseCapitalP(t *testing.T) {
 	target, _ := ParseTarget("macmini@host:333")
-	got := target.SCPArgs("/tmp/forge", "/tmp/forge.new")
-	want := []string{"-o", "BatchMode=yes", "-P", "333", "/tmp/forge", "macmini@host:/tmp/forge.new"}
+	got := target.SCPArgs("/tmp/kranq", "/tmp/kranq.new")
+	want := []string{"-o", "BatchMode=yes", "-P", "333", "/tmp/kranq", "macmini@host:/tmp/kranq.new"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
@@ -123,12 +123,12 @@ func TestRemovingTheLastPeerLeavesNothing(t *testing.T) {
 func TestAddingTwiceUpdatesRatherThanDuplicates(t *testing.T) {
 	r := &Registry{}
 	r.Add(Peer{Name: "mini-1", SSH: "u@h:22"})
-	r.Add(Peer{Name: "mini-1", SSH: "u@h:333", Bin: "/opt/forge"})
+	r.Add(Peer{Name: "mini-1", SSH: "u@h:333", Bin: "/opt/kranq"})
 	if len(r.Peers) != 1 {
 		t.Fatalf("%d peers", len(r.Peers))
 	}
 	p, _ := r.Get("mini-1")
-	if p.SSH != "u@h:333" || p.Bin != "/opt/forge" {
+	if p.SSH != "u@h:333" || p.Bin != "/opt/kranq" {
 		t.Fatalf("not updated: %+v", p)
 	}
 	if !p.Default {
@@ -188,23 +188,23 @@ func TestGetWithNoNameIsTheDefault(t *testing.T) {
 }
 
 func TestValidBin(t *testing.T) {
-	for _, good := range []string{"/opt/forge", "~/.local/bin/forge", "/Users/x/.local/bin/forge"} {
+	for _, good := range []string{"/opt/kranq", "~/.local/bin/kranq", "/Users/x/.local/bin/kranq"} {
 		if err := ValidBin(good); err != nil {
 			t.Fatalf("%q rejected: %v", good, err)
 		}
 	}
 	// A remote path is interpolated into a double-quoted string so a leading ~
 	// still expands, which makes these characters a command-injection risk.
-	for _, bad := range []string{"", "forge", "./forge", `~/f"oo`, "~/f$oo", "~/f`oo`", `~/f\oo`, "~/f\noo"} {
+	for _, bad := range []string{"", "kranq", "./kranq", `~/f"oo`, "~/f$oo", "~/f`oo`", `~/f\oo`, "~/f\noo"} {
 		if err := ValidBin(bad); err == nil {
-			t.Fatalf("%q was accepted as a remote forge path", bad)
+			t.Fatalf("%q was accepted as a remote kranq path", bad)
 		}
 	}
 }
 
 func TestAddRejectsAnUnsafeBin(t *testing.T) {
 	r := &Registry{}
-	if err := r.Add(Peer{Name: "mini", SSH: "u@h", Bin: "~/forge\"; rm -rf /"}); err == nil {
+	if err := r.Add(Peer{Name: "mini", SSH: "u@h", Bin: "~/kranq\"; rm -rf /"}); err == nil {
 		t.Fatal("a bin path carrying shell syntax was accepted")
 	}
 }

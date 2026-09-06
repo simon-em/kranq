@@ -44,13 +44,13 @@ func (r Remote) CloneCommand(ref, dest string) string {
 		return fmt.Sprintf("git clone --depth 1 --branch %s %s %s",
 			shellQuote(ref), shellQuote(r.sshURL()), dest)
 	}
-	helper := `'!f() { echo username=x-token-auth; echo "password=$FORGE_GIT_TOKEN"; }; f'`
+	helper := `'!f() { echo username=x-token-auth; echo "password=$KRANQ_GIT_TOKEN"; }; f'`
 	return fmt.Sprintf("git -c credential.helper= -c credential.helper=%s clone --depth 1 --branch %s %s %s",
 		helper, shellQuote(ref), shellQuote(r.httpsURL()), dest)
 }
 
 func ResolveToken(env map[string]string) string {
-	for _, name := range []string{"FORGE_GIT_TOKEN", "BITBUCKET_TOKEN", "BITBUCKET_API_TOKEN", "BITBUCKET_STEP_OAUTH_TOKEN"} {
+	for _, name := range []string{"KRANQ_GIT_TOKEN", "BITBUCKET_TOKEN", "BITBUCKET_API_TOKEN", "BITBUCKET_STEP_OAUTH_TOKEN"} {
 		if v := env[name]; v != "" {
 			return v
 		}

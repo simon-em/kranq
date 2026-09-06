@@ -3,9 +3,9 @@ package ipc
 import (
 	"time"
 
-	"github.com/effetmonstre/forge/internal/gate"
-	"github.com/effetmonstre/forge/internal/hostres"
-	"github.com/effetmonstre/forge/internal/state"
+	"github.com/simon-em/kranq/internal/gate"
+	"github.com/simon-em/kranq/internal/hostres"
+	"github.com/simon-em/kranq/internal/state"
 )
 
 type SubmitRequest struct {
@@ -15,7 +15,7 @@ type SubmitRequest struct {
 	Label     string            `json:"label,omitempty"`
 	Env       map[string]string `json:"env,omitempty"`
 	Keep      string            `json:"keep,omitempty"`
-	Forgefile string            `json:"forgefile,omitempty"`
+	Kranqfile string            `json:"kranqfile,omitempty"`
 	// Set when the source arrived by git push rather than being cloned from
 	// the git host. The commit is the exact object to build, not a branch tip
 	// that can move while the task waits in the queue.

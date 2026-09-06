@@ -8,15 +8,15 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/image"
-	"github.com/effetmonstre/forge/internal/state"
-	"github.com/effetmonstre/forge/internal/vm"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/image"
+	"github.com/simon-em/kranq/internal/state"
+	"github.com/simon-em/kranq/internal/vm"
 )
 
 func runVM(env Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(env.Stderr, "usage: forge vm ls|shell|rm")
+		fmt.Fprintln(env.Stderr, "usage: kranq vm ls|shell|rm")
 		return exitcode.Usage
 	}
 	subs := map[string]func(Env, []string) int{
@@ -26,7 +26,7 @@ func runVM(env Env, args []string) int {
 	}
 	sub, ok := subs[args[0]]
 	if !ok {
-		fmt.Fprintf(env.Stderr, "forge vm: unknown subcommand %q\n", args[0])
+		fmt.Fprintf(env.Stderr, "kranq vm: unknown subcommand %q\n", args[0])
 		return exitcode.Usage
 	}
 	return sub(env, args[1:])
@@ -36,7 +36,7 @@ func runVMs(env Env) ([]vm.Instance, int) {
 	_, driver := newManager()
 	all, err := driver.List(context.Background())
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return nil, exitcode.MissingDep
 	}
 	var out []vm.Instance
@@ -88,16 +88,16 @@ func resolveVM(env Env, ref string) (string, int) {
 	}
 	t, err := client.Get(context.Background(), ref)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return "", exitcode.NoSuchFile
 	}
 	if t.VMName == "" {
-		fmt.Fprintf(env.Stderr, "forge: task %s has no VM recorded\n", t.ID)
+		fmt.Fprintf(env.Stderr, "kranq: task %s has no VM recorded\n", t.ID)
 		return "", exitcode.NoSuchFile
 	}
 	if !t.VMKept {
-		fmt.Fprintf(env.Stderr, "forge: task %s ran in %s, which was destroyed when it finished\n", t.ID, t.VMName)
-		fmt.Fprintln(env.Stderr, "forge: re-run it with --keep-vm on-failure to be able to look inside")
+		fmt.Fprintf(env.Stderr, "kranq: task %s ran in %s, which was destroyed when it finished\n", t.ID, t.VMName)
+		fmt.Fprintln(env.Stderr, "kranq: re-run it with --keep-vm on-failure to be able to look inside")
 		return "", exitcode.NoSuchFile
 	}
 	return t.VMName, exitcode.OK
@@ -105,7 +105,7 @@ func resolveVM(env Env, ref string) (string, int) {
 
 func vmShell(env Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(env.Stderr, "usage: forge vm shell <task-id|vm-name> [-- command...]")
+		fmt.Fprintln(env.Stderr, "usage: kranq vm shell <task-id|vm-name> [-- command...]")
 		return exitcode.Usage
 	}
 	name, code := resolveVM(env, args[0])
@@ -125,7 +125,7 @@ func vmShell(env Env, args []string) int {
 		if ok := asExit(err, &exitErr); ok {
 			return exitErr.ExitCode()
 		}
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	return exitcode.OK
@@ -139,7 +139,7 @@ func appendSeparator(rest []string) []string {
 }
 
 // Where the VMs live is a setting, not just an environment variable: a daemon
-// started by launchd reads it from $FORGE_HOME/env, and a CLI that only looked
+// started by launchd reads it from $KRANQ_HOME/env, and a CLI that only looked
 // at the environment would list a different machine's worth of VMs than the one
 // actually running them.
 func limaHomeEnv() []string {
@@ -151,7 +151,7 @@ func limaHomeEnv() []string {
 
 func vmRemove(env Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(env.Stderr, "usage: forge vm rm <vm-name>... | --all")
+		fmt.Fprintln(env.Stderr, "usage: kranq vm rm <vm-name>... | --all")
 		return exitcode.Usage
 	}
 	m, _ := newManager()
@@ -169,7 +169,7 @@ func vmRemove(env Env, args []string) int {
 	worst := exitcode.OK
 	for _, name := range targets {
 		if err := m.Destroy(context.Background(), name); err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			worst = exitcode.InternalError
 			continue
 		}

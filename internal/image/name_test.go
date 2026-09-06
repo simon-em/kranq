@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/project"
+	"github.com/simon-em/kranq/internal/project"
 )
 
 const ttl = 14 * 24 * time.Hour
@@ -47,7 +47,7 @@ func file(dest, digest string) project.File {
 }
 
 func TestALayerIsKeyedOnItsParentAndItsContent(t *testing.T) {
-	base := "forge-base-abc-100"
+	base := "kranq-base-abc-100"
 	l := layer("bundle install", file("Gemfile.lock", "aaa"))
 	name := LayerName(base, l, 1)
 
@@ -65,7 +65,7 @@ func TestALayerIsKeyedOnItsParentAndItsContent(t *testing.T) {
 		l      project.Resolved
 		depth  int
 	}{
-		"a new base image":   {"forge-base-abc-101", l, 1},
+		"a new base image":   {"kranq-base-abc-101", l, 1},
 		"a changed command":  {base, layer("bundle install --jobs 4", l.Files...), 1},
 		"a changed lockfile": {base, layer("bundle install", file("Gemfile.lock", "bbb")), 1},
 		"a renamed file":     {base, layer("bundle install", file("yarn.lock", "aaa")), 1},
@@ -83,7 +83,7 @@ func TestALayerIsKeyedOnItsParentAndItsContent(t *testing.T) {
 // The whole point of content addressing: the same work under a different
 // repository is the same layer, built once and shared.
 func TestALayerDoesNotDependOnWhoBuiltIt(t *testing.T) {
-	base := "forge-base-abc-100"
+	base := "kranq-base-abc-100"
 	l := layer("apt-get install -y default-jdk")
 	if LayerName(base, l, 1) != LayerName(base, l, 1) {
 		t.Fatal("LayerName is not deterministic")
@@ -94,7 +94,7 @@ func TestALayerDoesNotDependOnWhoBuiltIt(t *testing.T) {
 }
 
 func TestAChainInvalidatesOnlyTheTail(t *testing.T) {
-	base := "forge-base-abc-100"
+	base := "kranq-base-abc-100"
 	layers := []project.Resolved{
 		layer("apt-get install -y default-jdk"),
 		layer("ruby-build 3.4.1 /opt/ci/ruby", file(".ruby-version", "aaa")),
@@ -120,7 +120,7 @@ func TestAChainInvalidatesOnlyTheTail(t *testing.T) {
 // Lima can grow a disk when cloning but never shrink one, so two projects
 // asking for different sizes must not land on the same layer.
 func TestADifferentDiskIsADifferentChain(t *testing.T) {
-	base := "forge-base-abc-100"
+	base := "kranq-base-abc-100"
 	layers := []project.Resolved{layer("apt-get install -y default-jdk")}
 	if Chain(base, "", layers)[1] == Chain(base, "80GiB", layers)[1] {
 		t.Error("a bigger disk reused a chain built on a smaller one")
@@ -134,13 +134,13 @@ func TestADifferentDiskIsADifferentChain(t *testing.T) {
 }
 
 func TestALayerNameFitsLimasSocketPath(t *testing.T) {
-	name := LayerName("forge-base-abcdef0123-4567", layer("x"), 99)
+	name := LayerName("kranq-base-abcdef0123-4567", layer("x"), 99)
 	path := "/Users/averyverylongusername/.lima/" + name + "/ssh.sock.1234567890123456"
 	if len(path) >= 104 {
 		t.Errorf("lima would build a %d byte socket path from %q, and macOS caps it at 104", len(path), name)
 	}
 	if !Managed(name) || !IsLayer(name) {
-		t.Errorf("%q must be recognised as a forge layer", name)
+		t.Errorf("%q must be recognised as a kranq layer", name)
 	}
 }
 
@@ -169,7 +169,7 @@ func TestAVMIsAttributableToItsTask(t *testing.T) {
 		t.Error("two tasks share a name, so the reaper cannot tell whose VM it is")
 	}
 	if !Managed(name) {
-		t.Errorf("%q must be recognised as forge-managed", name)
+		t.Errorf("%q must be recognised as kranq-managed", name)
 	}
 	if !strings.Contains(name, "dx") || !strings.Contains(name, "maintenance") {
 		t.Errorf("name = %q, want the repo and label legible to a human running limactl list", name)
@@ -177,9 +177,9 @@ func TestAVMIsAttributableToItsTask(t *testing.T) {
 }
 
 func TestManagedRefusesToClaimForeignInstances(t *testing.T) {
-	for _, name := range []string{"default", "ci-run-dx-spec-main-123", "my-vm", "forge", ""} {
+	for _, name := range []string{"default", "ci-run-dx-spec-main-123", "my-vm", "kranq", ""} {
 		if Managed(name) {
-			t.Errorf("Managed(%q) = true, want false so forge never destroys an instance it does not own", name)
+			t.Errorf("Managed(%q) = true, want false so kranq never destroys an instance it does not own", name)
 		}
 	}
 }
@@ -198,7 +198,7 @@ func TestRunNameStaysShortEnoughForLimaToBuildItsSocketPath(t *testing.T) {
 			len(path), path)
 	}
 	if !Managed(long) {
-		t.Errorf("%q must still be recognised as forge-managed after truncation", long)
+		t.Errorf("%q must still be recognised as kranq-managed after truncation", long)
 	}
 	if strings.HasSuffix(strings.TrimSuffix(long, long[len(long)-9:]), "-") {
 		t.Errorf("truncation left a dangling separator: %q", long)

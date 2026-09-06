@@ -13,13 +13,13 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/peer"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/peer"
 )
 
 func runPeer(env Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(env.Stderr, "usage: forge peer add|ls|rm|test|upgrade")
+		fmt.Fprintln(env.Stderr, "usage: kranq peer add|ls|rm|test|upgrade")
 		return exitcode.Usage
 	}
 	subs := map[string]func(Env, []string) int{
@@ -31,17 +31,17 @@ func runPeer(env Env, args []string) int {
 	}
 	sub, ok := subs[args[0]]
 	if !ok {
-		fmt.Fprintf(env.Stderr, "forge peer: unknown subcommand %q\n", args[0])
+		fmt.Fprintf(env.Stderr, "kranq peer: unknown subcommand %q\n", args[0])
 		return exitcode.Usage
 	}
 	return sub(env, args[1:])
 }
 
 func peerRegistry(env Env) (*peer.Registry, string, int) {
-	path := peer.Path(forgeHome())
+	path := peer.Path(kranqHome())
 	r, err := peer.Load(path)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return nil, "", exitcode.InternalError
 	}
 	return r, path, exitcode.OK
@@ -55,9 +55,9 @@ func resolvePeer(env Env, name string) (peer.Peer, int) {
 	p, err := r.Get(name)
 	if err != nil {
 		if errors.Is(err, peer.ErrNoPeers) {
-			fmt.Fprintln(env.Stderr, "forge: no peers are registered; `forge peer add <name> --ssh user@host:port`")
+			fmt.Fprintln(env.Stderr, "kranq: no peers are registered; `kranq peer add <name> --ssh user@host:port`")
 		} else {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		}
 		return peer.Peer{}, exitcode.Misconfigured
 	}
@@ -68,14 +68,14 @@ func peerAdd(env Env, args []string) int {
 	fs := flag.NewFlagSet("peer add", flag.ContinueOnError)
 	fs.SetOutput(env.Stderr)
 	ssh := fs.String("ssh", "", "user@host[:port]")
-	bin := fs.String("bin", "", "path to forge on that machine")
+	bin := fs.String("bin", "", "path to kranq on that machine")
 	asDefault := fs.Bool("default", false, "make this the peer commands use with no --peer")
 	rest, err := parsePermuted(fs, args)
 	if err != nil {
 		return exitcode.Usage
 	}
 	if len(rest) != 1 || *ssh == "" {
-		fmt.Fprintln(env.Stderr, "usage: forge peer add <name> --ssh user@host[:port] [--bin PATH] [--default]")
+		fmt.Fprintln(env.Stderr, "usage: kranq peer add <name> --ssh user@host[:port] [--bin PATH] [--default]")
 		return exitcode.Usage
 	}
 	r, path, code := peerRegistry(env)
@@ -83,14 +83,14 @@ func peerAdd(env Env, args []string) int {
 		return code
 	}
 	if err := r.Add(peer.Peer{Name: rest[0], SSH: *ssh, Bin: *bin, Default: *asDefault}); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Usage
 	}
 	if err := r.Save(path); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
-	fmt.Fprintf(env.Stderr, "peer %s added; `forge peer test %s` to check it\n", rest[0], rest[0])
+	fmt.Fprintf(env.Stderr, "peer %s added; `kranq peer test %s` to check it\n", rest[0], rest[0])
 	return exitcode.OK
 }
 
@@ -104,7 +104,7 @@ func peerList(env Env, args []string) int {
 		return exitcode.OK
 	}
 	w := tabwriter.NewWriter(env.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tSSH\tFORGE\tDEFAULT")
+	fmt.Fprintln(w, "NAME\tSSH\tKRANQ\tDEFAULT")
 	for _, p := range r.Peers {
 		star := ""
 		if p.Default {
@@ -118,7 +118,7 @@ func peerList(env Env, args []string) int {
 
 func peerRemove(env Env, args []string) int {
 	if len(args) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: forge peer rm <name>")
+		fmt.Fprintln(env.Stderr, "usage: kranq peer rm <name>")
 		return exitcode.Usage
 	}
 	r, path, code := peerRegistry(env)
@@ -126,11 +126,11 @@ func peerRemove(env Env, args []string) int {
 		return code
 	}
 	if err := r.Remove(args[0]); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Misconfigured
 	}
 	if err := r.Save(path); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	fmt.Fprintf(env.Stderr, "peer %s removed\n", args[0])
@@ -147,13 +147,13 @@ func peerTest(env Env, args []string) int {
 
 	arch, err := sshCapture(target, "uname -m")
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: cannot reach %s: %v\n", p.SSH, err)
+		fmt.Fprintf(env.Stderr, "kranq: cannot reach %s: %v\n", p.SSH, err)
 		return exitcode.Unreachable
 	}
 	fmt.Fprintf(env.Stderr, "reachable, %s\n", strings.TrimSpace(arch))
 
 	if _, err := sshCapture(target, remotePath(p.Bin)+" version"); err != nil {
-		fmt.Fprintf(env.Stderr, "no forge at %s; `forge peer upgrade %s` installs one\n", p.Bin, p.Name)
+		fmt.Fprintf(env.Stderr, "no kranq at %s; `kranq peer upgrade %s` installs one\n", p.Bin, p.Name)
 		return exitcode.MissingDep
 	}
 	out, err := sshCapture(target, remotePath(p.Bin)+" doctor")
@@ -167,7 +167,7 @@ func peerTest(env Env, args []string) int {
 func peerUpgrade(env Env, args []string) int {
 	fs := flag.NewFlagSet("peer upgrade", flag.ContinueOnError)
 	fs.SetOutput(env.Stderr)
-	binary := fs.String("binary", "", "forge binary to send (default: the running one)")
+	binary := fs.String("binary", "", "kranq binary to send (default: the running one)")
 	force := fs.Bool("force", false, "upgrade even while work is in flight there")
 	rest, err := parsePermuted(fs, args)
 	if err != nil {
@@ -183,7 +183,7 @@ func peerUpgrade(env Env, args []string) int {
 	if source == "" {
 		self, err := os.Executable()
 		if err != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 			return exitcode.InternalError
 		}
 		source = self
@@ -191,7 +191,7 @@ func peerUpgrade(env Env, args []string) int {
 
 	arch, err := sshCapture(target, "uname -m")
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: cannot reach %s: %v\n", p.SSH, err)
+		fmt.Fprintf(env.Stderr, "kranq: cannot reach %s: %v\n", p.SSH, err)
 		return exitcode.Unreachable
 	}
 	if *binary == "" {
@@ -200,16 +200,16 @@ func peerUpgrade(env Env, args []string) int {
 		}
 	}
 
-	staged := fmt.Sprintf("/tmp/forge-upgrade-%d", time.Now().UnixNano())
+	staged := fmt.Sprintf("/tmp/kranq-upgrade-%d", time.Now().UnixNano())
 	fmt.Fprintf(env.Stderr, "sending %s to %s\n", filepath.Base(source), p.Name)
 	if err := runQuiet("scp", target.SCPArgs(source, staged)...); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: could not copy the binary: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: could not copy the binary: %v\n", err)
 		return exitcode.Unreachable
 	}
 	defer sshCapture(target, "rm -f "+shellQuote(staged))
 
 	if _, err := sshCapture(target, remotePath(p.Bin)+" version"); err != nil {
-		fmt.Fprintf(env.Stderr, "no forge at %s yet, installing\n", p.Bin)
+		fmt.Fprintf(env.Stderr, "no kranq at %s yet, installing\n", p.Bin)
 		return sshStream(env, target, fmt.Sprintf("chmod 755 %s && %s install", shellQuote(staged), shellQuote(staged)))
 	}
 	cmd := fmt.Sprintf("%s upgrade %s --target %s", remotePath(p.Bin), shellQuote(staged), remotePath(p.Bin))
@@ -226,8 +226,8 @@ func archMatches(env Env, remote string) int {
 	if want == "" || remote == want {
 		return exitcode.OK
 	}
-	fmt.Fprintf(env.Stderr, "forge: this binary is %s but that machine is %s\n", runtime.GOARCH, remote)
-	fmt.Fprintf(env.Stderr, "build one for it and pass --binary:\n  GOOS=darwin GOARCH=%s go build -o forge-%s .\n",
+	fmt.Fprintf(env.Stderr, "kranq: this binary is %s but that machine is %s\n", runtime.GOARCH, remote)
+	fmt.Fprintf(env.Stderr, "build one for it and pass --binary:\n  GOOS=darwin GOARCH=%s go build -o kranq-%s .\n",
 		archOf(remote), archOf(remote))
 	return exitcode.Misconfigured
 }
@@ -253,7 +253,7 @@ func sshStream(env Env, target peer.Target, command string) int {
 		if errors.As(err, &exit) {
 			return exit.ExitCode()
 		}
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Unreachable
 	}
 	return exitcode.OK

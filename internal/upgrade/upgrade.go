@@ -17,7 +17,7 @@ var ErrNoPrevious = errors.New("no previous binary to roll back to")
 
 func Previous(target string) string { return target + ".prev" }
 
-// Manager is a package manager that owns forge's binary, and the command it
+// Manager is a package manager that owns kranq's binary, and the command it
 // answers to. The two differ: the manager is called homebrew and the command is
 // brew, and printing the wrong one gives somebody a line that does not run.
 type Manager struct {
@@ -65,7 +65,7 @@ func Verify(ctx context.Context, path string) (string, error) {
 		Version string `json:"version"`
 	}
 	if err := json.Unmarshal(out, &v); err != nil || v.Version == "" {
-		return "", fmt.Errorf("%s did not report a version, so it is not a forge binary", filepath.Base(path))
+		return "", fmt.Errorf("%s did not report a version, so it is not a kranq binary", filepath.Base(path))
 	}
 	return v.Version, nil
 }

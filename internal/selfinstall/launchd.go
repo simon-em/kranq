@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-const Label = "com.effetmonstre.forge"
+const Label = "com.effetmonstre.kranq"
 
 type Service struct {
 	Binary string
@@ -27,7 +27,7 @@ func PlistPath() (string, error) {
 
 func (s Service) Plist() string {
 	var env strings.Builder
-	fmt.Fprintf(&env, "    <key>FORGE_HOME</key>\n    <string>%s</string>\n", escape(s.Home))
+	fmt.Fprintf(&env, "    <key>KRANQ_HOME</key>\n    <string>%s</string>\n", escape(s.Home))
 	if s.Path != "" {
 		fmt.Fprintf(&env, "    <key>PATH</key>\n    <string>%s</string>\n", escape(s.Path))
 	}

@@ -1,6 +1,6 @@
 # Killing a job, and why it is fiddly
 
-Three facts, each learned by getting it wrong in the system forge replaces. None of them is
+Three facts, each learned by getting it wrong in the system kranq replaces. None of them is
 rediscoverable from reading the code, which is why they are written down here.
 
 ## The signal has to reach the process group
@@ -26,15 +26,15 @@ seconds, and the same test fails against the previous behaviour.
 Nothing can be done about it in the signal path, because `SIGKILL` cannot be trapped and the
 child is in its own process group, so it is orphaned rather than killed. The answer is not a
 better signal, it is reconciliation: VMs are named after the task that owns them
-(`forge-run-<repo>-<label>-<task-id>`), so a reaper can list instances, cross-reference the
+(`kranq-run-<repo>-<label>-<task-id>`), so a reaper can list instances, cross-reference the
 store, and destroy any whose task is finished or unknown.
 
 The old naming used the shell's `$$`, which cannot survive a restart and therefore made this
 impossible.
 
-## forge only ever destroys what it owns
+## kranq only ever destroys what it owns
 
-`image.Managed` gates every destructive operation on the `forge-` prefix. This is what lets
-forge run on the same machine as the system it replaces without the two fighting over each
+`image.Managed` gates every destructive operation on the `kranq-` prefix. This is what lets
+kranq run on the same machine as the system it replaces without the two fighting over each
 other's instances, and it is covered by a test that asserts a `ci-run-*` instance is *not*
 claimed.

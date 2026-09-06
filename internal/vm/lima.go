@@ -99,7 +99,7 @@ func (l Lima) Exists(name string) bool {
 }
 
 func (l Lima) CreateFromTemplate(ctx context.Context, name string, template []byte, out io.Writer) error {
-	file, err := os.CreateTemp("", "forge-lima-*.yaml")
+	file, err := os.CreateTemp("", "kranq-lima-*.yaml")
 	if err != nil {
 		return err
 	}

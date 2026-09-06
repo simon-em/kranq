@@ -9,16 +9,16 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/effetmonstre/forge/assets"
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/image"
-	"github.com/effetmonstre/forge/internal/project"
-	"github.com/effetmonstre/forge/internal/task"
+	"github.com/simon-em/kranq/assets"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/image"
+	"github.com/simon-em/kranq/internal/project"
+	"github.com/simon-em/kranq/internal/task"
 )
 
 func runValidate(env Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(env.Stderr, "usage: forge validate <task.yaml|Forgefile>...")
+		fmt.Fprintln(env.Stderr, "usage: kranq validate <task.yaml|Kranqfile>...")
 		return exitcode.Usage
 	}
 	worst := exitcode.OK
@@ -46,7 +46,7 @@ func runValidate(env Env, args []string) int {
 
 func runRender(env Env, args []string) int {
 	if len(args) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: forge render <task.yaml>")
+		fmt.Fprintln(env.Stderr, "usage: kranq render <task.yaml>")
 		return exitcode.Usage
 	}
 	spec, code, err := loadSpec(args[0])
@@ -58,7 +58,7 @@ func runRender(env Env, args []string) int {
 	return exitcode.OK
 }
 
-// A task is yaml and a Forgefile is not, so the two never need telling apart by
+// A task is yaml and a Kranqfile is not, so the two never need telling apart by
 // content.
 func isBuildFile(path string) bool {
 	return filepath.Base(path) == project.DefaultFile ||
@@ -75,7 +75,7 @@ func validateBuild(env Env, path string) int {
 	}
 	rel, err := filepath.Rel(root, absOr(root, path))
 	if err != nil || strings.HasPrefix(rel, "..") {
-		fmt.Fprintf(env.Stderr, "%s: run forge validate from the repository root\n", path)
+		fmt.Fprintf(env.Stderr, "%s: run kranq validate from the repository root\n", path)
 		return exitcode.Usage
 	}
 	p, err := project.Load(root, rel)

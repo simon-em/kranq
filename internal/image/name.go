@@ -7,18 +7,33 @@ import (
 	"strings"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/project"
+	"github.com/simon-em/kranq/internal/project"
 )
 
 const (
-	BasePrefix  = "forge-base"
-	LayerPrefix = "forge-layer"
-	RunPrefix   = "forge-run"
-
-	// Built by the single-layer scheme the Forgefile replaced. Nothing creates
-	// these any more; the prefix survives so prune can still sweep them.
-	LegacyProjectPrefix = "forge-proj"
+	BasePrefix  = "kranq-base"
+	LayerPrefix = "kranq-layer"
+	RunPrefix   = "kranq-run"
 )
+
+// Names from before this tool was renamed, and from the single-layer scheme the
+// Kranqfile replaced. Nothing creates them any more. They are still recognised
+// so prune can sweep them: an image this tool built but no longer answers to
+// would sit on a build machine forever, and Managed is what permits deleting
+// anything at all.
+var legacyPrefixes = []string{
+	"kranq-proj-",
+	"forge-base-", "forge-layer-", "forge-run-", "forge-proj-",
+}
+
+func Legacy(name string) bool {
+	for _, p := range legacyPrefixes {
+		if strings.HasPrefix(name, p) {
+			return true
+		}
+	}
+	return false
+}
 
 var notSlug = regexp.MustCompile(`[^a-z0-9]+`)
 
@@ -94,12 +109,12 @@ func RunName(repo, label, taskID string) string {
 }
 
 func Managed(name string) bool {
-	for _, p := range []string{BasePrefix + "-", LayerPrefix + "-", RunPrefix + "-", LegacyProjectPrefix + "-"} {
+	for _, p := range []string{BasePrefix + "-", LayerPrefix + "-", RunPrefix + "-"} {
 		if strings.HasPrefix(name, p) {
 			return true
 		}
 	}
-	return false
+	return Legacy(name)
 }
 
 func IsLayer(name string) bool { return strings.HasPrefix(name, LayerPrefix+"-") }

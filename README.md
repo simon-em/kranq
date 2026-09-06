@@ -1,4 +1,4 @@
-# forge
+# kranq
 
 One binary that runs CI jobs in disposable [Lima](https://lima-vm.io) VMs on a
 macOS build machine. It installs itself, installs its own dependencies, keeps
@@ -8,15 +8,15 @@ it through a CLI.
 It replaces `ci-runner` and the two bash clients in `infrastructure/ci/`.
 
 ```sh
-forge install                                    # binary, PATH, lima, launchd
-forge run ci/tasks/spec.yaml --repo dx --branch main
-forge push ci/tasks/spec.yaml --repo dx          # send this repo, run it there
-forge doctor                                     # is this machine able to run jobs
+kranq install                                    # binary, PATH, lima, launchd
+kranq run ci/tasks/spec.yaml --repo dx --branch main
+kranq push ci/tasks/spec.yaml --repo dx          # send this repo, run it there
+kranq doctor                                     # is this machine able to run jobs
 ```
 
 **[Every command](docs/commands.md)** · [Writing a task](docs/tasks.md) ·
-[The Forgefile](docs/build.md) ·
-[Pushing work to forge](docs/push.md) · [Wiring it into a pipeline](docs/pipelines.md) ·
+[The Kranqfile](docs/build.md) ·
+[Pushing work to kranq](docs/push.md) · [Wiring it into a pipeline](docs/pipelines.md) ·
 [At-most-once effects](docs/fence.md) · [Operating it](docs/operations.md) ·
 [Installing with Homebrew](docs/homebrew.md) ·
 [Where things stand](docs/status.md)
@@ -35,9 +35,9 @@ APFS copy-on-write clone.
 Measured on a 16 GiB M-series Mac: the shared base image builds in 153s, dx's
 layers in 289s, and a job against a warm image runs in about 20s.
 
-## The environment is a Forgefile
+## The environment is a Kranqfile
 
-A repository's `Forgefile` reads like a Dockerfile, and each `RUN` is a layer:
+A repository's `Kranqfile` reads like a Dockerfile, and each `RUN` is a layer:
 
 ```
 RUN sudo apt-get install -y --no-install-recommends default-jdk libvips
@@ -60,16 +60,16 @@ cloning it costs 0.10s and zero bytes. See [build.md](docs/build.md).
 **Clone.** The VM fetches the repository from the git host, using a forwarded
 token or ssh agent. This is what a pipeline that already has credentials does.
 
-**Push.** You send the code to forge and it already has it:
+**Push.** You send the code to kranq and it already has it:
 
 ```sh
-git remote add forge ssh://macmini@buildhost:333/dx.git
-git config remote.forge.receivepack '$HOME/.local/bin/forge git-receive'
-git push forge main:refs/heads/run -o task=ci/tasks/spec.yaml
+git remote add kranq ssh://macmini@buildhost:333/dx.git
+git config remote.kranq.receivepack '$HOME/.local/bin/kranq git-receive'
+git push kranq main:refs/heads/run -o task=ci/tasks/spec.yaml
 ```
 
 If your ssh key already reaches the machine, that is the whole setup: the
-repository is created on the first push, and no forge-specific key is involved.
+repository is created on the first push, and no kranq-specific key is involved.
 
 The build log streams back to your terminal as it runs. Nothing is cloned, so
 nothing needs a credential to read the code, and a commit that exists nowhere
@@ -96,8 +96,8 @@ usage returns. Rotating the token opens the gate immediately.
 ## Install
 
 ```sh
-brew tap simontlbt/forge https://github.com/simontlbt/forge
-brew install simontlbt/forge/forge
+brew tap simon-em/kranq https://github.com/simon-em/kranq
+brew install simon-em/kranq/kranq
 ```
 
 That is all of it: lima is fetched and verified the first time a command needs a
@@ -106,22 +106,22 @@ VM.
 See [homebrew.md](docs/homebrew.md). Or from a binary you already have:
 
 ```sh
-./forge install --with-daemon
-forge auth claude --stdin < token.txt
-forge doctor
+./kranq install --with-daemon
+kranq auth claude --stdin < token.txt
+kranq doctor
 ```
 
 `install` verifies Lima against a checksum compiled into the binary *and* the
-published `SHA256SUMS`, which must agree, then keeps it under `$FORGE_HOME/deps`
+published `SHA256SUMS`, which must agree, then keeps it under `$KRANQ_HOME/deps`
 and calls it by absolute path. A Homebrew lima appearing or disappearing cannot
 change what runs.
 
 To set up another build machine from your laptop:
 
 ```sh
-forge peer add mini-1 --ssh macmini@buildhost:333 --default
-forge peer upgrade mini-1
-forge peer test mini-1
+kranq peer add mini-1 --ssh macmini@buildhost:333 --default
+kranq peer upgrade mini-1
+kranq peer test mini-1
 ```
 
 ## Layout
@@ -139,7 +139,7 @@ internal/daemon/     the daemon, the job supervisor, the git endpoint
 internal/jobproc/    the handover between a job process and the daemon
 internal/ipc/        http over a unix socket
 internal/run/        one job end to end, including the pushed-source path
-internal/project/    the Forgefile: parsing it, and resolving what COPY selects
+internal/project/    the Kranqfile: parsing it, and resolving what COPY selects
 internal/image/      content-addressed layers, the chain cache, build, prune
 internal/vm/         the limactl driver, behind an interface with a fake
 internal/gitsrv/     receiving a git push over http and over ssh
@@ -174,7 +174,7 @@ What that cannot cover is run against real hardware, and
 separate ways: the ssh-agent socket, the daemon socket, and Lima instance names.
 `doctor` checks it.
 
-**Non-login ssh on macOS gets a minimal PATH.** Nothing forge runs on a peer
+**Non-login ssh on macOS gets a minimal PATH.** Nothing kranq runs on a peer
 relies on PATH; everything uses an absolute path.
 
 **An unforced `git push` is not a compare-and-swap.** It accepts any

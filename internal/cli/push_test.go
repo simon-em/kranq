@@ -4,16 +4,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/gitsrv"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/gitsrv"
 )
 
 func TestPushURL(t *testing.T) {
-	got, err := pushURL("https://ci.example.com", "dx", "forge_abc123")
+	got, err := pushURL("https://ci.example.com", "dx", "kranq_abc123")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got != "https://forge:forge_abc123@ci.example.com/git/dx.git" {
+	if got != "https://kranq:kranq_abc123@ci.example.com/git/dx.git" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -48,11 +48,11 @@ func TestPushURLRejectsSomethingThatIsNotAURL(t *testing.T) {
 // The token is the password. It must not end up as a command-line argument,
 // where anything else on the machine can read it out of the process list.
 func TestTheTokenTravelsInTheURLNotAnArgument(t *testing.T) {
-	got, err := pushURL("https://ci.example.com", "dx", "forge_s3cr3t")
+	got, err := pushURL("https://ci.example.com", "dx", "kranq_s3cr3t")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(got, "forge_s3cr3t@") {
+	if !strings.Contains(got, "kranq_s3cr3t@") {
 		t.Fatalf("the token is not in the userinfo: %q", got)
 	}
 }
@@ -61,16 +61,16 @@ func TestTheTokenTravelsInTheURLNotAnArgument(t *testing.T) {
 // every misuse, so a token defaulted from the environment would be echoed into
 // the terminal and into CI logs.
 func TestUsageNeverPrintsTheToken(t *testing.T) {
-	t.Setenv("FORGE_TOKEN", "forge_s3cr3tvalue")
-	t.Setenv("FORGE_ENDPOINT", "https://ci.example.com")
+	t.Setenv("KRANQ_TOKEN", "kranq_s3cr3tvalue")
+	t.Setenv("KRANQ_ENDPOINT", "https://ci.example.com")
 	_, out, errb := invoke(t, "push")
-	if strings.Contains(out+errb, "forge_s3cr3tvalue") {
+	if strings.Contains(out+errb, "kranq_s3cr3tvalue") {
 		t.Fatalf("the token was printed:\n%s%s", out, errb)
 	}
 }
 
 func TestEnvShorthandIsAccepted(t *testing.T) {
-	t.Setenv("FORGE_TOKEN", "")
+	t.Setenv("KRANQ_TOKEN", "")
 	code, _, errb := invoke(t, "push", "spec.yaml", "-e", "FOO=bar", "--repo", "dx")
 	// It must fail for the missing endpoint, not for an unknown flag.
 	if strings.Contains(errb, "flag provided but not defined") {
@@ -86,15 +86,15 @@ func TestEnvShorthandIsAccepted(t *testing.T) {
 func TestRefusalCodeTellsAuthFromEverythingElse(t *testing.T) {
 	cases := map[string]int{
 		"fatal: Authentication failed for 'https://ci/git/dx.git'":  exitcode.Unauthorized,
-		"remote: a forge token is required":                         exitcode.Unauthorized,
+		"remote: a kranq token is required":                         exitcode.Unauthorized,
 		"fatal: could not resolve host: ci.example.com":             exitcode.Unreachable,
 		"fatal: unable to access: Failed to connect to ci port 443": exitcode.Unreachable,
-		"remote: forge: ci/spec.yaml is not in the pushed commit":   exitcode.InvalidSpec,
+		"remote: kranq: ci/spec.yaml is not in the pushed commit":   exitcode.InvalidSpec,
 		// What ssh actually says when the key is not installed: it never uses
 		// the word "authentication", so matching on that alone missed it.
 		"macmini@host: Permission denied (publickey).":                  exitcode.Unauthorized,
 		"fatal: Could not read from remote repository.":                 exitcode.Unauthorized,
-		`forge: "cat" is not allowed; this key may only push and fetch`: exitcode.Unauthorized,
+		`kranq: "cat" is not allowed; this key may only push and fetch`: exitcode.Unauthorized,
 		"": exitcode.InvalidSpec,
 	}
 	for output, want := range cases {
@@ -116,7 +116,7 @@ func TestPushURLOverSSH(t *testing.T) {
 	}
 	// A token must not be smuggled into an ssh url, where it would sit in the
 	// process list for no benefit.
-	with, err := pushURL("ssh://macmini@host:333", "dx", "forge_s3cr3t")
+	with, err := pushURL("ssh://macmini@host:333", "dx", "kranq_s3cr3t")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,8 +135,8 @@ func TestAnHTTPEndpointStillNeedsAToken(t *testing.T) {
 // sits beside an ordinary key for the same host. Without IdentitiesOnly, ssh
 // offers the ordinary key first and the forced command never runs.
 func TestSSHCommandPinsTheIdentity(t *testing.T) {
-	got := sshCommand("/Users/x/.ssh/forge_push")
-	for _, want := range []string{"-i '/Users/x/.ssh/forge_push'", "IdentitiesOnly=yes", "IdentityAgent=none"} {
+	got := sshCommand("/Users/x/.ssh/kranq_push")
+	for _, want := range []string{"-i '/Users/x/.ssh/kranq_push'", "IdentitiesOnly=yes", "IdentityAgent=none"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("%q missing from %q", want, got)
 		}
@@ -150,19 +150,19 @@ func TestSSHCommandQuotesAPathWithSpaces(t *testing.T) {
 	}
 }
 
-// Asking for forge as the receive-pack is what lets an ordinary ssh key push:
-// git runs forge on the far side itself, so nothing has to be set up there.
-func TestSSHPushAsksForForgeAsTheReceivePack(t *testing.T) {
+// Asking for kranq as the receive-pack is what lets an ordinary ssh key push:
+// git runs kranq on the far side itself, so nothing has to be set up there.
+func TestSSHPushAsksForKranqAsTheReceivePack(t *testing.T) {
 	if defaultReceivePack == "" {
 		t.Fatal("there is no default, so a plain ssh endpoint needs server-side setup")
 	}
-	if !strings.Contains(defaultReceivePack, "forge") {
-		t.Fatalf("the default does not name forge: %q", defaultReceivePack)
+	if !strings.Contains(defaultReceivePack, "kranq") {
+		t.Fatalf("the default does not name kranq: %q", defaultReceivePack)
 	}
-	// $HOME rather than a literal path: the far side expands it, and forge does
+	// $HOME rather than a literal path: the far side expands it, and kranq does
 	// not know that machine's home directory.
 	if !strings.HasPrefix(defaultReceivePack, "$HOME/") {
-		t.Fatalf("the default assumes a path forge cannot know: %q", defaultReceivePack)
+		t.Fatalf("the default assumes a path kranq cannot know: %q", defaultReceivePack)
 	}
 }
 
@@ -184,7 +184,7 @@ func TestEveryPushGoesToItsOwnRef(t *testing.T) {
 		t.Fatalf("two pushes share the ref %q, so the second would be a no-op", first)
 	}
 	for _, ref := range []string{first, second} {
-		if !strings.HasPrefix(ref, "refs/forge/push/") {
+		if !strings.HasPrefix(ref, "refs/kranq/push/") {
 			t.Errorf("ref = %q, want it outside refs/heads so it is not mistaken for a branch", ref)
 		}
 		if strings.Count(ref, "/") < 2 {
@@ -197,23 +197,23 @@ func TestABranchIsReportedEvenWhenTheRefIsANonce(t *testing.T) {
 	if got := branchFromRef("refs/heads/ci/lima"); got != "ci/lima" {
 		t.Errorf("branchFromRef = %q, want the branch", got)
 	}
-	if got := branchFromRef(pushRef()); got != "forge-push" {
+	if got := branchFromRef(pushRef()); got != "kranq-push" {
 		t.Errorf("branchFromRef = %q, want a readable fallback, not a nonce", got)
 	}
 }
 
 // A run that was refused never produced a task exit code, so its code is
-// forge's own and must not be folded into the generic failure that a task
+// kranq's own and must not be folded into the generic failure that a task
 // reporting 65 would be.
 func TestARefusedRunKeepsItsOwnCode(t *testing.T) {
-	refused := gitsrv.ParseResult("remote: FORGE-RESULT id= status=refused exit=65 reason=no claude token\n")
+	refused := gitsrv.ParseResult("remote: KRANQ-RESULT id= status=refused exit=65 reason=no claude token\n")
 	if !refused.Found || refused.Status != gitsrv.StatusRefused || refused.ExitCode != 65 {
 		t.Fatalf("parsed %+v", refused)
 	}
 	if got := exitcode.FromTask(refused.ExitCode); got == refused.ExitCode {
 		t.Skip("the reserved range no longer overlaps; this test is guarding nothing")
 	}
-	ran := gitsrv.ParseResult("remote: FORGE-RESULT id=x status=failed exit=12\n")
+	ran := gitsrv.ParseResult("remote: KRANQ-RESULT id=x status=failed exit=12\n")
 	if exitcode.FromTask(ran.ExitCode) != 12 {
 		t.Errorf("a task's own code must pass through, got %d", exitcode.FromTask(ran.ExitCode))
 	}

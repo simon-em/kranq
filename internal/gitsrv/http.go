@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/token"
+	"github.com/simon-em/kranq/internal/token"
 )
 
 // git-http-backend is not on PATH on macOS; it lives in git's exec directory.
@@ -59,8 +59,8 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		// Git only offers credentials after a challenge, so this header is what
 		// makes `git push` send the token rather than fail outright.
-		w.Header().Set("WWW-Authenticate", `Basic realm="forge"`)
-		http.Error(w, "a forge token is required", http.StatusUnauthorized)
+		w.Header().Set("WWW-Authenticate", `Basic realm="kranq"`)
+		http.Error(w, "a kranq token is required", http.StatusUnauthorized)
 		s.logf("git: rejected %s %s", r.Method, r.URL.Path)
 		return
 	}
@@ -94,7 +94,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 			"GIT_PROJECT_ROOT=" + dir,
 			"GIT_HTTP_EXPORT_ALL=1",
 			"REMOTE_USER=" + name,
-			"FORGE_TOKEN_NAME=" + name,
+			"KRANQ_TOKEN_NAME=" + name,
 		},
 		InheritEnv: []string{"PATH", "HOME"},
 	}).ServeHTTP(streaming(w), proxied)

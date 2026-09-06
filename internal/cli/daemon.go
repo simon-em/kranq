@@ -16,32 +16,32 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 
-	"github.com/effetmonstre/forge/internal/daemon"
-	"github.com/effetmonstre/forge/internal/deps"
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/ipc"
-	"github.com/effetmonstre/forge/internal/selfinstall"
+	"github.com/simon-em/kranq/internal/daemon"
+	"github.com/simon-em/kranq/internal/deps"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/ipc"
+	"github.com/simon-em/kranq/internal/selfinstall"
 )
 
 func daemonConfig() daemon.Config {
-	home := forgeHome()
+	home := kranqHome()
 	get := settings(home)
 	return daemon.Config{
 		Home:            home,
 		Version:         Version,
-		MaxVMs:          settingInt(get, "FORGE_MAX_VMS", 2),
-		MemoryHeadroom:  int64(settingInt(get, "FORGE_MEMORY_HEADROOM_MB", 2048)) << 20,
+		MaxVMs:          settingInt(get, "KRANQ_MAX_VMS", 2),
+		MemoryHeadroom:  int64(settingInt(get, "KRANQ_MEMORY_HEADROOM_MB", 2048)) << 20,
 		ClaudeToken:     get("CLAUDE_CODE_OAUTH_TOKEN"),
-		GitRemote:       get("FORGE_GIT_REMOTE"),
-		LimaHome:        get("FORGE_LIMA_HOME"),
-		HTTPAddr:        get("FORGE_HTTP_ADDR"),
-		AutoCreateRepos: settingBool(get, "FORGE_AUTO_CREATE_REPOS", true),
-		AutoInstallDeps: settingBool(get, "FORGE_AUTO_INSTALL_DEPS", true),
+		GitRemote:       get("KRANQ_GIT_REMOTE"),
+		LimaHome:        get("KRANQ_LIMA_HOME"),
+		HTTPAddr:        get("KRANQ_HTTP_ADDR"),
+		AutoCreateRepos: settingBool(get, "KRANQ_AUTO_CREATE_REPOS", true),
+		AutoInstallDeps: settingBool(get, "KRANQ_AUTO_INSTALL_DEPS", true),
 	}
 }
 
 // A daemon started over ssh, or by launchd, has almost no environment, so every
-// setting falls back to $FORGE_HOME/env. The environment still wins, which is
+// setting falls back to $KRANQ_HOME/env. The environment still wins, which is
 // what makes a one-off override work without editing the file.
 func settings(home string) func(string) string {
 	stored, err := daemon.LoadEnv(home)
@@ -84,7 +84,7 @@ func newDaemon() (*daemon.Daemon, error) {
 	if err != nil {
 		return nil, err
 	}
-	// The daemon does not run jobs itself. It starts `forge exec` in its own
+	// The daemon does not run jobs itself. It starts `kranq exec` in its own
 	// process group and reads what that records, so a job outlives a restart
 	// and a restarted daemon can pick it back up.
 	sup := &daemon.Supervisor{Binary: self, Home: cfg.Home}
@@ -100,7 +100,7 @@ func newDaemon() (*daemon.Daemon, error) {
 
 func runDaemon(env Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(env.Stderr, "usage: forge daemon run|start|stop|status")
+		fmt.Fprintln(env.Stderr, "usage: kranq daemon run|start|stop|status")
 		return exitcode.Usage
 	}
 	subs := map[string]func(Env, []string) int{
@@ -111,7 +111,7 @@ func runDaemon(env Env, args []string) int {
 	}
 	sub, ok := subs[args[0]]
 	if !ok {
-		fmt.Fprintf(env.Stderr, "forge daemon: unknown subcommand %q\n", args[0])
+		fmt.Fprintf(env.Stderr, "kranq daemon: unknown subcommand %q\n", args[0])
 		return exitcode.Usage
 	}
 	return sub(env, args[1:])
@@ -120,14 +120,14 @@ func runDaemon(env Env, args []string) int {
 func daemonRun(env Env, args []string) int {
 	d, err := newDaemon()
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	fmt.Fprintf(env.Stderr, "forge daemon %s listening on %s\n", Version, daemonConfig().SocketPath())
+	fmt.Fprintf(env.Stderr, "kranq daemon %s listening on %s\n", Version, daemonConfig().SocketPath())
 	if err := d.Run(ctx); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	return exitcode.OK
@@ -140,11 +140,11 @@ func daemonStart(env Env, args []string) int {
 		return exitcode.OK
 	}
 	if err := spawnDaemon(); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	if err := client.WaitReady(context.Background(), 10*time.Second); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Unreachable
 	}
 	fmt.Fprintln(env.Stderr, "daemon started")
@@ -162,8 +162,8 @@ func spawnDaemon() error {
 // The binary is explicit because an upgrade restarts the daemon from the copy
 // it just installed, which is not necessarily the copy running the command.
 func spawnDaemonFrom(bin string) error {
-	logPath := forgeHome() + "/daemon.log"
-	if err := selfinstall.EnsureHome(forgeHome()); err != nil {
+	logPath := kranqHome() + "/daemon.log"
+	if err := selfinstall.EnsureHome(kranqHome()); err != nil {
 		return err
 	}
 	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
@@ -193,18 +193,18 @@ func daemonStop(env Env, args []string) int {
 		return exitcode.OK
 	}
 	if n := daemon.InFlight(status); n > 0 && !*force {
-		fmt.Fprintf(env.Stderr, "forge: %d task(s) in flight (%s)\n", n, daemon.Describe(status))
+		fmt.Fprintf(env.Stderr, "kranq: %d task(s) in flight (%s)\n", n, daemon.Describe(status))
 		fmt.Fprintln(env.Stderr, "--force stops the daemon anyway; the jobs keep running "+
 			"and are re-adopted when it starts again")
 		return exitcode.Misconfigured
 	}
 	pid, err := readPID(cfg.LockPath())
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: could not signal pid %d: %v\n", pid, err)
+		fmt.Fprintf(env.Stderr, "kranq: could not signal pid %d: %v\n", pid, err)
 		return exitcode.InternalError
 	}
 	// Waiting for the socket to close is not enough: it stops answering as soon
@@ -212,7 +212,7 @@ func daemonStop(env Env, args []string) int {
 	// still holding the lock. Anything that starts a new daemon straight after,
 	// which is what an upgrade does, would then fail to acquire it.
 	if !waitForExit(pid, 10*time.Second) {
-		fmt.Fprintf(env.Stderr, "forge: pid %d has not exited yet\n", pid)
+		fmt.Fprintf(env.Stderr, "kranq: pid %d has not exited yet\n", pid)
 		return exitcode.InternalError
 	}
 	fmt.Fprintln(env.Stderr, "daemon stopped")
@@ -257,7 +257,7 @@ func runStatus(env Env, args []string) int {
 	}
 	status, err := client.Status(context.Background())
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Unreachable
 	}
 	if *asJSON {
@@ -266,7 +266,7 @@ func runStatus(env Env, args []string) int {
 		_ = enc.Encode(status)
 		return exitcode.OK
 	}
-	fmt.Fprintf(env.Stdout, "forge %s, pid %d, up %s\n", status.Version, status.PID, status.Uptime)
+	fmt.Fprintf(env.Stdout, "kranq %s, pid %d, up %s\n", status.Version, status.PID, status.Uptime)
 	fmt.Fprintf(env.Stdout, "queue     queued=%d blocked=%d running=%d/%d lost=%d\n",
 		status.Queued, status.Blocked, status.Running, status.MaxVMs, status.Lost)
 	if status.StopReason != "" {
@@ -298,19 +298,19 @@ func connect(env Env, autostart bool) (*ipc.Client, int) {
 	if client.Ping(context.Background()) == nil {
 		return client, exitcode.OK
 	}
-	if !autostart || os.Getenv("FORGE_AUTOSTART") == "0" {
-		fmt.Fprintf(env.Stderr, "forge: no daemon at %s; start one with `forge daemon start`\n", cfg.SocketPath())
+	if !autostart || os.Getenv("KRANQ_AUTOSTART") == "0" {
+		fmt.Fprintf(env.Stderr, "kranq: no daemon at %s; start one with `kranq daemon start`\n", cfg.SocketPath())
 		return nil, exitcode.Unreachable
 	}
 	if err := spawnDaemon(); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: could not start the daemon: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: could not start the daemon: %v\n", err)
 		return nil, exitcode.InternalError
 	}
 	if err := client.WaitReady(context.Background(), 10*time.Second); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v; see %s/daemon.log\n", err, cfg.Home)
+		fmt.Fprintf(env.Stderr, "kranq: %v; see %s/daemon.log\n", err, cfg.Home)
 		return nil, exitcode.Unreachable
 	}
-	fmt.Fprintln(env.Stderr, "forge: started the local daemon")
+	fmt.Fprintln(env.Stderr, "kranq: started the local daemon")
 	return client, exitcode.OK
 }
 
@@ -332,7 +332,7 @@ func limactlPath(home string) string {
 
 // ensureLima is what every command that actually needs a VM calls. Installing
 // on first use rather than making people run an install step means the thing
-// they asked for happens, which is the whole point of forge carrying its own
+// they asked for happens, which is the whole point of kranq carrying its own
 // dependency.
 func ensureLima(env Env, home string) (string, error) {
 	lima := deps.Lima{Root: home}
@@ -341,7 +341,7 @@ func ensureLima(env Env, home string) (string, error) {
 	}
 	if !daemonConfig().AutoInstallDeps {
 		return "", fmt.Errorf("lima is not installed and this machine does not fetch it automatically.\n" +
-			"run `forge install --deps-only`, or `forge config set FORGE_AUTO_INSTALL_DEPS=true`")
+			"run `kranq install --deps-only`, or `kranq config set KRANQ_AUTO_INSTALL_DEPS=true`")
 	}
 	if !deps.Supported() {
 		return "", fmt.Errorf("this machine cannot run lima, so it cannot run jobs; " +
@@ -357,7 +357,7 @@ func ensureLima(env Env, home string) (string, error) {
 // nodeName only ever appears in a fence record, so a machine that cannot name
 // itself is a cosmetic problem rather than a fatal one.
 func nodeName() string {
-	if v := os.Getenv("FORGE_NODE"); v != "" {
+	if v := os.Getenv("KRANQ_NODE"); v != "" {
 		return v
 	}
 	host, err := os.Hostname()

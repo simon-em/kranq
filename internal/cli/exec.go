@@ -8,16 +8,16 @@ import (
 	"path/filepath"
 	"syscall"
 
-	"github.com/effetmonstre/forge/assets"
-	"github.com/effetmonstre/forge/internal/daemon"
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/jobproc"
-	"github.com/effetmonstre/forge/internal/run"
-	"github.com/effetmonstre/forge/internal/state"
-	"github.com/effetmonstre/forge/internal/vm"
+	"github.com/simon-em/kranq/assets"
+	"github.com/simon-em/kranq/internal/daemon"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/jobproc"
+	"github.com/simon-em/kranq/internal/run"
+	"github.com/simon-em/kranq/internal/state"
+	"github.com/simon-em/kranq/internal/vm"
 )
 
-// forge exec runs one job to completion and records what happened in the task
+// kranq exec runs one job to completion and records what happened in the task
 // directory. The daemon starts it and reads that record, which is what lets a
 // job survive the daemon and a restarted daemon pick the outcome back up.
 //
@@ -26,7 +26,7 @@ import (
 // task's process from a stranger that inherited its pid.
 func runExec(env Env, args []string) int {
 	if len(args) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: forge exec <task-id>")
+		fmt.Fprintln(env.Stderr, "usage: kranq exec <task-id>")
 		return exitcode.Usage
 	}
 	id := args[0]
@@ -37,18 +37,18 @@ func runExec(env Env, args []string) int {
 
 	store, err := state.Open(cfg.TasksDir())
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	t, err := store.Get(id)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	dir := store.Dir(id)
 	script, err := os.ReadFile(jobproc.ScriptPath(dir))
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 
@@ -59,7 +59,7 @@ func runExec(env Env, args []string) int {
 
 	limaBin, err := ensureLima(env, cfg.Home)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.MissingDep
 	}
 	driver := vm.Lima{Bin: limaBin, Home: cfg.LimaHome}
@@ -79,7 +79,7 @@ func runExec(env Env, args []string) int {
 
 	res := runner.Run(ctx, t, string(script), os.Stdout)
 	if err := jobproc.WriteResult(dir, res); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: could not record the result: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: could not record the result: %v\n", err)
 		return exitcode.InternalError
 	}
 	return exitcode.FromTask(res.ExitCode)

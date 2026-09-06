@@ -6,14 +6,14 @@ import (
 	"text/tabwriter"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/selfinstall"
-	"github.com/effetmonstre/forge/internal/token"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/selfinstall"
+	"github.com/simon-em/kranq/internal/token"
 )
 
 func runToken(env Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(env.Stderr, "usage: forge token create|ls|revoke")
+		fmt.Fprintln(env.Stderr, "usage: kranq token create|ls|revoke")
 		return exitcode.Usage
 	}
 	subs := map[string]func(Env, []string) int{
@@ -23,17 +23,17 @@ func runToken(env Env, args []string) int {
 	}
 	sub, ok := subs[args[0]]
 	if !ok {
-		fmt.Fprintf(env.Stderr, "forge token: unknown subcommand %q\n", args[0])
+		fmt.Fprintf(env.Stderr, "kranq token: unknown subcommand %q\n", args[0])
 		return exitcode.Usage
 	}
 	return sub(env, args[1:])
 }
 
 func tokenSet(env Env) (*token.Set, string, int) {
-	path := token.Path(forgeHome())
+	path := token.Path(kranqHome())
 	set, err := token.Load(path)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return nil, "", exitcode.InternalError
 	}
 	return set, path, exitcode.OK
@@ -41,11 +41,11 @@ func tokenSet(env Env) (*token.Set, string, int) {
 
 func tokenCreate(env Env, args []string) int {
 	if len(args) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: forge token create <name>")
+		fmt.Fprintln(env.Stderr, "usage: kranq token create <name>")
 		return exitcode.Usage
 	}
-	if err := selfinstall.EnsureHome(forgeHome()); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+	if err := selfinstall.EnsureHome(kranqHome()); err != nil {
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	set, path, code := tokenSet(env)
@@ -54,14 +54,14 @@ func tokenCreate(env Env, args []string) int {
 	}
 	secret, err := set.Create(args[0], time.Now())
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		if errors.Is(err, token.ErrExists) {
-			fmt.Fprintf(env.Stderr, "revoke it first if you mean to replace it: forge token revoke %s\n", args[0])
+			fmt.Fprintf(env.Stderr, "revoke it first if you mean to replace it: kranq token revoke %s\n", args[0])
 		}
 		return exitcode.Usage
 	}
 	if err := set.Save(path); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	// Only the hash is kept, so this is the one and only time it can be shown.
@@ -76,7 +76,7 @@ func tokenList(env Env, args []string) int {
 		return code
 	}
 	if len(set.Tokens) == 0 {
-		fmt.Fprintln(env.Stderr, "no tokens; `forge token create <name>`")
+		fmt.Fprintln(env.Stderr, "no tokens; `kranq token create <name>`")
 		return exitcode.OK
 	}
 	w := tabwriter.NewWriter(env.Stdout, 0, 0, 2, ' ', 0)
@@ -95,7 +95,7 @@ func tokenList(env Env, args []string) int {
 
 func tokenRevoke(env Env, args []string) int {
 	if len(args) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: forge token revoke <name>")
+		fmt.Fprintln(env.Stderr, "usage: kranq token revoke <name>")
 		return exitcode.Usage
 	}
 	set, path, code := tokenSet(env)
@@ -103,11 +103,11 @@ func tokenRevoke(env Env, args []string) int {
 		return code
 	}
 	if err := set.Revoke(args[0]); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Misconfigured
 	}
 	if err := set.Save(path); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InternalError
 	}
 	fmt.Fprintf(env.Stderr, "token %q revoked\n", args[0])

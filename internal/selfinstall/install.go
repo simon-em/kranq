@@ -9,8 +9,8 @@ import (
 )
 
 const (
-	markerStart = "# >>> forge >>>"
-	markerEnd   = "# <<< forge <<<"
+	markerStart = "# >>> kranq >>>"
+	markerEnd   = "# <<< kranq <<<"
 )
 
 type Plan struct {
@@ -36,7 +36,7 @@ func InstallBinary(prefix string, out io.Writer) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	dest := filepath.Join(prefix, "forge")
+	dest := filepath.Join(prefix, "kranq")
 	if same, _ := sameFile(self, dest); same {
 		fmt.Fprintf(out, "already installed at %s\n", dest)
 		return dest, nil
@@ -123,7 +123,7 @@ func AddToProfile(profile, prefix, shell string, out io.Writer) error {
 		return err
 	}
 	if strings.Contains(string(existing), markerStart) {
-		fmt.Fprintf(out, "%s already has a forge block\n", profile)
+		fmt.Fprintf(out, "%s already has a kranq block\n", profile)
 		return nil
 	}
 	if err := os.MkdirAll(filepath.Dir(profile), 0o755); err != nil {
@@ -160,7 +160,7 @@ func RemoveFromProfile(profile string, out io.Writer) error {
 	if err := os.WriteFile(profile, []byte(trimmed), 0o644); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "removed the forge block from %s\n", profile)
+	fmt.Fprintf(out, "removed the kranq block from %s\n", profile)
 	return nil
 }
 

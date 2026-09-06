@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/state"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/state"
 )
 
 type Client struct {
@@ -44,7 +44,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 		}
 		reader = bytes.NewReader(data)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, "http://forge"+path, reader)
+	req, err := http.NewRequestWithContext(ctx, method, "http://kranq"+path, reader)
 	if err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any, out any)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return &RemoteError{Code: exitcode.Unreachable, Msg: "cannot reach the forge daemon: " + err.Error()}
+		return &RemoteError{Code: exitcode.Unreachable, Msg: "cannot reach the kranq daemon: " + err.Error()}
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode >= 400 {
@@ -104,7 +104,7 @@ func (c *Client) Logs(ctx context.Context, id string, follow bool, w io.Writer) 
 	if follow {
 		path += "?follow=1"
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://forge"+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://kranq"+path, nil)
 	if err != nil {
 		return err
 	}
@@ -121,7 +121,7 @@ func (c *Client) Logs(ctx context.Context, id string, follow bool, w io.Writer) 
 }
 
 func (c *Client) Artifacts(ctx context.Context, id string, w io.Writer) (bool, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://forge/v1/tasks/"+id+"/artifacts", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://kranq/v1/tasks/"+id+"/artifacts", nil)
 	if err != nil {
 		return false, err
 	}

@@ -1,6 +1,6 @@
-# The Forgefile
+# The Kranqfile
 
-Every repository has a `Forgefile` at its root describing the environment its
+Every repository has a `Kranqfile` at its root describing the environment its
 jobs run in. It reads like a Dockerfile, because it is doing the same job:
 
 ```
@@ -17,7 +17,7 @@ COPY Gemfile Gemfile.lock .
 RUN bundle install
 ```
 
-There is no `FROM`: every Forgefile starts from forge's own base image, and
+There is no `FROM`: every Kranqfile starts from kranq's own base image, and
 there is nothing to choose. There is no `CMD` or `ENTRYPOINT` either — a layer
 is an environment, not a service, and what runs in it is the task.
 
@@ -34,12 +34,12 @@ files it copies, so editing `Gemfile.lock` invalidates from `bundle install`
 onward and leaves everything before it alone.
 
 ```
-$ forge validate Forgefile
+$ kranq validate Kranqfile
 LINE  INSTRUCTION                        FILES  IMAGE
-4     RUN sudo apt-get update                0  forge-layer-01-97ab2ab29342
-5     RUN sudo apt-get install -y --no-...   0  forge-layer-02-8297b861bb31
-8     RUN ruby-build "$(cat .ruby-versi...   1  forge-layer-03-0cf0d6d9e047
-11    RUN bundle install                     2  forge-layer-04-2b3a3377b10b
+4     RUN sudo apt-get update                0  kranq-layer-01-97ab2ab29342
+5     RUN sudo apt-get install -y --no-...   0  kranq-layer-02-8297b861bb31
+8     RUN ruby-build "$(cat .ruby-versi...   1  kranq-layer-03-0cf0d6d9e047
+11    RUN bundle install                     2  kranq-layer-04-2b3a3377b10b
 ```
 
 Group commands into one `RUN` where you would not want them cached separately,
@@ -52,7 +52,7 @@ Measured, not assumed. Cloning the 2.9 GB base:
 ```
 $ df -k /   # free before
 299.134 GiB
-$ limactl clone forge-base-8517c8a5d2-1478 probe
+$ limactl clone kranq-base-8517c8a5d2-1478 probe
 real 0.10
 $ df -k /   # free after
 299.134 GiB
@@ -67,10 +67,10 @@ the clone cost 0.45 GiB of real disk, and nothing else did.
 times over:
 
 ```
-$ du -shc ~/.lima/forge-*
-2.9G  forge-base-8517c8a5d2-1478
-2.9G  forge-layer-01-ee1199af5078
-2.9G  forge-layer-02-275d7293032b
+$ du -shc ~/.lima/kranq-*
+2.9G  kranq-base-8517c8a5d2-1478
+2.9G  kranq-layer-01-ee1199af5078
+2.9G  kranq-layer-02-275d7293032b
 8.7G  total
 
 $ df   # before and after deleting both layers
@@ -95,7 +95,7 @@ RUN sudo -u postgres createdb app && \
 
 Every job then starts with the data already loaded and pays nothing for it, and
 editing `seed.sql` reloads it without reinstalling postgres. `systemctl enable`
-is the part people forget: the layer captures the data either way, but the
+is the part people kranqt: the layer captures the data either way, but the
 service has to be set to come back when the job's VM boots.
 
 ## Layers are shared between repositories
@@ -120,7 +120,7 @@ key. A file that matters to the build is in the build.
 | `RUN <command>` | bash, in a login shell, in `WORKDIR`. Ends a layer. |
 | `RUN <<EOF` … `EOF` | the same, over many lines, with no trailing backslashes |
 | `COPY <src>… <dest>` | from the repository root into the image |
-| `WORKDIR <abs path>` | for every instruction after it; defaults to `/forge/build` |
+| `WORKDIR <abs path>` | for every instruction after it; defaults to `/kranq/build` |
 | `ENV NAME=VALUE …` | exported for every `RUN` after it, in order |
 | `MEMORY`, `CPUS`, `DISK` | how big the VM is. Dockerfiles have no equivalent; VMs need one. |
 
@@ -141,9 +141,9 @@ sudo apt-get install -y --no-install-recommends default-jdk libvips
 EOF
 ```
 
-Instructions a Dockerfile has and a Forgefile refuses — `FROM`, `CMD`,
+Instructions a Dockerfile has and a Kranqfile refuses — `FROM`, `CMD`,
 `ENTRYPOINT`, `ADD`, `EXPOSE`, `USER`, `ARG`, `VOLUME`, `LABEL`, `HEALTHCHECK`,
-`ONBUILD`, `SHELL`, `STOPSIGNAL` — each fail by name with what forge does
+`ONBUILD`, `SHELL`, `STOPSIGNAL` — each fail by name with what kranq does
 instead, because what someone pastes a Dockerfile in for is usually one of them.
 
 `ADD` is refused rather than aliased to `COPY`: it also unpacks archives and
@@ -185,15 +185,15 @@ don't; leaving it out is usually right.
 
 ## Naming a different file
 
-Both of these read `Forgefile.staging` from the repository root:
+Both of these read `Kranqfile.staging` from the repository root:
 
 ```sh
-forge run ci/tasks/spec.yaml --forgefile Forgefile.staging
+kranq run ci/tasks/spec.yaml --kranqfile Kranqfile.staging
 ```
 
 ```yaml
 name: spec
-forgefile: Forgefile.staging
+kranqfile: Kranqfile.staging
 steps:
   - run: bundle exec rspec
 ```
@@ -204,26 +204,26 @@ wherever the file itself lives.
 ## Building ahead of time
 
 ```sh
-forge image build --repo dx --ref main
-forge image build --repo dx --ref main --forgefile Forgefile.staging
-forge image ls
+kranq image build --repo dx --ref main
+kranq image build --repo dx --ref main --kranqfile Kranqfile.staging
+kranq image ls
 ```
 
-`forge image ls` shows each image with the instruction it came from and when it
+`kranq image ls` shows each image with the instruction it came from and when it
 was last used.
 
 ## Pruning
 
-`forge image prune` keeps the `FORGE_KEEP_IMAGES` (default 3) most recently used
+`kranq image prune` keeps the `KRANQ_KEEP_IMAGES` (default 3) most recently used
 chain *heads* — the layer a job actually clones — together with everything they
 are built on. Deleting an ancestor of a chain you still want costs a full rebuild
 of everything above it, so ancestry is protected rather than aged out on its own.
 
-A layer is only ever considered usable once forge has recorded that its build
+A layer is only ever considered usable once kranq has recorded that its build
 finished. `limactl` creates an instance directory the moment a clone starts, so
 existence alone would hand a job a layer whose build is still running, or one
 left behind by a machine that died mid-build.
 
 Concurrent builds of the same layer are serialised by a `flock` in
-`$FORGE_HOME/layers`, not an in-process mutex: jobs run in separate `forge exec`
+`$KRANQ_HOME/layers`, not an in-process mutex: jobs run in separate `kranq exec`
 processes, so a mutex would not see them.

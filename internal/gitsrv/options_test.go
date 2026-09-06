@@ -94,7 +94,7 @@ func TestRedactKeepsNamesAndDropsValues(t *testing.T) {
 }
 
 func TestParseResult(t *testing.T) {
-	out := `remote: forge: task 20260904T150405-abc succeeded (exit 0)
+	out := `remote: kranq: task 20260904T150405-abc succeeded (exit 0)
 remote: ` + ResultMarker + ` id=20260904T150405-abc status=failed exit=7
 To http://127.0.0.1:8420/git/dx.git
 `
@@ -110,7 +110,7 @@ To http://127.0.0.1:8420/git/dx.git
 // Without a result line the caller must not assume success: the run may still
 // be going, or the connection may have dropped.
 func TestParseResultReportsAbsence(t *testing.T) {
-	for _, out := range []string{"", "remote: forge: task queued\nTo http://x\n", "FORGE-RESULTS id=x"} {
+	for _, out := range []string{"", "remote: kranq: task queued\nTo http://x\n", "KRANQ-RESULTS id=x"} {
 		if ParseResult(out).Found && !strings.Contains(out, ResultMarker+" ") {
 			t.Fatalf("a result was invented from %q", out)
 		}

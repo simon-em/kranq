@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/daemon"
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/ipc"
-	"github.com/effetmonstre/forge/internal/state"
+	"github.com/simon-em/kranq/internal/daemon"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/ipc"
+	"github.com/simon-em/kranq/internal/state"
 )
 
 // An executor that runs nothing and leaves one artifact behind, which is all
@@ -36,8 +36,8 @@ func (a artifactExec) Execute(_ context.Context, t state.Task, _ string, _ *os.F
 func daemonWithAnArtifact(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
-	t.Setenv("FORGE_HOME", home)
-	t.Setenv("FORGE_AUTOSTART", "0")
+	t.Setenv("KRANQ_HOME", home)
+	t.Setenv("KRANQ_AUTOSTART", "0")
 
 	exec := &artifactExec{}
 	d, err := daemon.New(daemon.Config{
@@ -81,7 +81,7 @@ func daemonWithAnArtifact(t *testing.T) string {
 	}
 }
 
-// The pipeline runs `ssh machine forge fetch <id> | tar xzf -`, so stdout has
+// The pipeline runs `ssh machine kranq fetch <id> | tar xzf -`, so stdout has
 // to be the archive itself and nothing else.
 func TestFetchWritesATarballToStdout(t *testing.T) {
 	id := daemonWithAnArtifact(t)

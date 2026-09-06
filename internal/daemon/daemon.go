@@ -8,14 +8,14 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/gate"
-	"github.com/effetmonstre/forge/internal/hostres"
-	"github.com/effetmonstre/forge/internal/ipc"
-	"github.com/effetmonstre/forge/internal/jobproc"
-	"github.com/effetmonstre/forge/internal/sched"
-	"github.com/effetmonstre/forge/internal/sockpath"
-	"github.com/effetmonstre/forge/internal/state"
-	"github.com/effetmonstre/forge/internal/svc"
+	"github.com/simon-em/kranq/internal/gate"
+	"github.com/simon-em/kranq/internal/hostres"
+	"github.com/simon-em/kranq/internal/ipc"
+	"github.com/simon-em/kranq/internal/jobproc"
+	"github.com/simon-em/kranq/internal/sched"
+	"github.com/simon-em/kranq/internal/sockpath"
+	"github.com/simon-em/kranq/internal/state"
+	"github.com/simon-em/kranq/internal/svc"
 )
 
 type Config struct {
@@ -41,8 +41,8 @@ type Config struct {
 	AutoInstallDeps bool
 }
 
-func (c Config) SocketPath() string { return sockpath.For(filepath.Join(c.Home, "forge.sock")) }
-func (c Config) LockPath() string   { return filepath.Join(c.Home, "forge.pid") }
+func (c Config) SocketPath() string { return sockpath.For(filepath.Join(c.Home, "kranq.sock")) }
+func (c Config) LockPath() string   { return filepath.Join(c.Home, "kranq.pid") }
 func (c Config) TasksDir() string   { return filepath.Join(c.Home, "tasks") }
 func (c Config) GatePath() string   { return filepath.Join(c.Home, "gate.json") }
 
@@ -148,7 +148,7 @@ func (d *Daemon) Submit(req ipc.SubmitRequest) (state.Task, error) {
 		Label:        req.Label,
 		Env:          req.Env,
 		Keep:         req.Keep,
-		Forgefile:    req.Forgefile,
+		Kranqfile:    req.Kranqfile,
 		SourceCommit: req.SourceCommit,
 	}, svc.Capabilities{
 		HasClaudeToken: d.gate.Present(),
@@ -215,14 +215,14 @@ func (d *Daemon) Status() ipc.Status {
 }
 
 func Home() string {
-	if v := os.Getenv("FORGE_HOME"); v != "" {
+	if v := os.Getenv("KRANQ_HOME"); v != "" {
 		return v
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".forge"
+		return ".kranq"
 	}
-	return filepath.Join(home, ".forge")
+	return filepath.Join(home, ".kranq")
 }
 
 func InFlight(s ipc.Status) int { return s.Queued + s.Blocked + s.Running }

@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/effetmonstre/forge/internal/cli"
+	"github.com/simon-em/kranq/internal/cli"
 )
 
 func main() {

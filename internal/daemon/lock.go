@@ -19,7 +19,7 @@ func Lock(path string) (func(), error) {
 	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		holder, _ := os.ReadFile(path)
 		f.Close()
-		return nil, fmt.Errorf("another forge daemon is already running (pid %s)", trim(string(holder)))
+		return nil, fmt.Errorf("another kranq daemon is already running (pid %s)", trim(string(holder)))
 	}
 	if err := f.Truncate(0); err != nil {
 		f.Close()

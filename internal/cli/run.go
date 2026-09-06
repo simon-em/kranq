@@ -11,16 +11,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/effetmonstre/forge/assets"
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/fence"
-	"github.com/effetmonstre/forge/internal/ipc"
-	"github.com/effetmonstre/forge/internal/project"
-	"github.com/effetmonstre/forge/internal/run"
-	"github.com/effetmonstre/forge/internal/sshagent"
-	"github.com/effetmonstre/forge/internal/state"
-	"github.com/effetmonstre/forge/internal/task"
-	"github.com/effetmonstre/forge/internal/vm"
+	"github.com/simon-em/kranq/assets"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/fence"
+	"github.com/simon-em/kranq/internal/ipc"
+	"github.com/simon-em/kranq/internal/project"
+	"github.com/simon-em/kranq/internal/run"
+	"github.com/simon-em/kranq/internal/sshagent"
+	"github.com/simon-em/kranq/internal/state"
+	"github.com/simon-em/kranq/internal/task"
+	"github.com/simon-em/kranq/internal/vm"
 )
 
 const defaultRemote = "git@bitbucket.org:effetmonstre"
@@ -48,11 +48,11 @@ func runRun(env Env, args []string) int {
 	branch := fs.String("branch", envOr("CI_BRANCH", "BITBUCKET_BRANCH"), "branch to check out")
 	label := fs.String("label", "", "label for the VM and artifacts (default: the task name)")
 	artifacts := fs.String("artifacts", "", "directory to copy ci-artifacts/ into")
-	remote := fs.String("remote", envOr("FORGE_GIT_REMOTE"), "git remote base")
+	remote := fs.String("remote", envOr("KRANQ_GIT_REMOTE"), "git remote base")
 	local := fs.Bool("local", false, "run in this process instead of submitting to the daemon")
 	detach := fs.Bool("detach", false, "print the task id and exit without following")
 	keep := fs.String("keep-vm", "never", "keep the job VM: never, on-failure, always")
-	forgefile := fs.String("forgefile", "", "build file to read, relative to the repository root (default: "+project.DefaultFile+")")
+	kranqfile := fs.String("kranqfile", "", "build file to read, relative to the repository root (default: "+project.DefaultFile+")")
 	timeout := fs.Duration("timeout", 4*time.Hour, "ceiling on the run")
 	forward := envFlag{}
 	fs.Var(forward, "env", "NAME=VALUE, or bare NAME to forward it from this environment")
@@ -62,16 +62,16 @@ func runRun(env Env, args []string) int {
 		return exitcode.Usage
 	}
 	if len(positional) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: forge run <task.yaml> [flags]")
+		fmt.Fprintln(env.Stderr, "usage: kranq run <task.yaml> [flags]")
 		fs.PrintDefaults()
 		return exitcode.Usage
 	}
 	if _, ok := run.ParseKeep(*keep); !ok {
-		fmt.Fprintf(env.Stderr, "forge: --keep-vm %q: want never, on-failure or always\n", *keep)
+		fmt.Fprintf(env.Stderr, "kranq: --keep-vm %q: want never, on-failure or always\n", *keep)
 		return exitcode.Usage
 	}
 	if *repo == "" || *branch == "" {
-		fmt.Fprintln(env.Stderr, "forge: set --repo and --branch (or CI_REPO/CI_BRANCH)")
+		fmt.Fprintln(env.Stderr, "kranq: set --repo and --branch (or CI_REPO/CI_BRANCH)")
 		return exitcode.Misconfigured
 	}
 	if *remote == "" {
@@ -101,7 +101,7 @@ func runRun(env Env, args []string) int {
 		return submitAndFollow(env, submission{
 			spec: string(specRaw), repo: *repo, branch: *branch, label: *label,
 			env: forward, artifacts: *artifacts, detach: *detach, keep: *keep,
-			forgefile: *forgefile,
+			kranqfile: *kranqfile,
 		})
 	}
 
@@ -111,9 +111,9 @@ func runRun(env Env, args []string) int {
 	defer stop()
 
 	taskID := time.Now().UTC().Format("20060102T150405")
-	work, mkErr := os.MkdirTemp("", "forge-run-*")
+	work, mkErr := os.MkdirTemp("", "kranq-run-*")
 	if mkErr != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", mkErr)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", mkErr)
 		return exitcode.InternalError
 	}
 	defer os.RemoveAll(work)
@@ -121,9 +121,9 @@ func runRun(env Env, args []string) int {
 	keepPolicy, _ := run.ParseKeep(*keep)
 	remoteSpec := run.Remote{Base: *remote, Repo: *repo, Token: run.ResolveToken(forward)}
 	if remoteSpec.Token == "" {
-		sock, agentErr := sshagent.Ensure(forgeHome())
+		sock, agentErr := sshagent.Ensure(kranqHome())
 		if agentErr != nil {
-			fmt.Fprintf(env.Stderr, "forge: %v\n", agentErr)
+			fmt.Fprintf(env.Stderr, "kranq: %v\n", agentErr)
 			return exitcode.Misconfigured
 		}
 		os.Setenv("SSH_AUTH_SOCK", sock)
@@ -131,14 +131,14 @@ func runRun(env Env, args []string) int {
 	checkout := work + "/repo"
 	fmt.Fprintf(env.Stderr, "checking out %s of %s\n", *branch, *repo)
 	if err := run.HostCheckout(ctx, remoteSpec, *branch, checkout); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.CouldNotStart
 	}
 
 	daemonCfg := daemonConfig()
 	limaBin, limaErr := ensureLima(env, daemonCfg.Home)
 	if limaErr != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", limaErr)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", limaErr)
 		return exitcode.MissingDep
 	}
 	driver := vm.Lima{Bin: limaBin, Home: daemonCfg.LimaHome}
@@ -159,10 +159,10 @@ func runRun(env Env, args []string) int {
 		RemoteBase:  *remote,
 		Keep:        keepPolicy,
 		Fence:       localFence(spec, *branch, *repo),
-		Forgefile:   firstNonEmpty(*forgefile, spec.Forgefile),
+		Kranqfile:   firstNonEmpty(*kranqfile, spec.Kranqfile),
 	}, env.Stderr)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		if ctx.Err() != nil {
 			return exitcode.Cancelled
 		}
@@ -177,7 +177,7 @@ func localFence(spec task.Spec, branch, repo string) *run.FencePlan {
 		return nil
 	}
 	return &run.FencePlan{
-		Dir:   filepath.Join(forgeHome(), "fence"),
+		Dir:   filepath.Join(kranqHome(), "fence"),
 		Node:  nodeName(),
 		Scope: fence.Scope{Kind: spec.FenceKind(), Repo: repo, Branch: spec.FenceBranch(branch)},
 	}
@@ -215,15 +215,15 @@ func parsePermuted(fs *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
-func forgeHome() string {
-	if v := os.Getenv("FORGE_HOME"); v != "" {
+func kranqHome() string {
+	if v := os.Getenv("KRANQ_HOME"); v != "" {
 		return v
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".forge"
+		return ".kranq"
 	}
-	return home + "/.forge"
+	return home + "/.kranq"
 }
 
 type submission struct {
@@ -235,7 +235,7 @@ type submission struct {
 	artifacts string
 	detach    bool
 	keep      string
-	forgefile string
+	kranqfile string
 }
 
 func submitAndFollow(env Env, s submission) int {
@@ -246,25 +246,25 @@ func submitAndFollow(env Env, s submission) int {
 	ctx := context.Background()
 	t, err := client.Submit(ctx, ipc.SubmitRequest{
 		Spec: s.spec, Repo: s.repo, Branch: s.branch, Label: s.label, Env: s.env,
-		Keep: s.keep, Forgefile: s.forgefile,
+		Keep: s.keep, Kranqfile: s.kranqfile,
 	})
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return codeOf(err, exitcode.InternalError)
 	}
 	if s.detach {
 		fmt.Fprintln(env.Stdout, t.ID)
 		return exitcode.OK
 	}
-	fmt.Fprintf(env.Stderr, "forge: task %s queued\n", t.ID)
+	fmt.Fprintf(env.Stderr, "kranq: task %s queued\n", t.ID)
 	waitForStart(ctx, client, t.ID, env)
 
 	if err := client.Logs(ctx, t.ID, true, env.Stdout); err != nil {
-		fmt.Fprintf(env.Stderr, "forge: log stream ended: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: log stream ended: %v\n", err)
 	}
 	final, err := client.Get(ctx, t.ID)
 	if err != nil {
-		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Unreachable
 	}
 	fetchArtifacts(client, t.ID, s.artifacts, env)
@@ -274,24 +274,24 @@ func submitAndFollow(env Env, s submission) int {
 func report(env Env, t state.Task) int {
 	switch t.Status {
 	case state.StatusSucceeded:
-		fmt.Fprintf(env.Stderr, "forge: %s succeeded\n", t.ID)
+		fmt.Fprintf(env.Stderr, "kranq: %s succeeded\n", t.ID)
 		return exitcode.OK
 	case state.StatusCancelled:
-		fmt.Fprintf(env.Stderr, "forge: %s was cancelled\n", t.ID)
+		fmt.Fprintf(env.Stderr, "kranq: %s was cancelled\n", t.ID)
 		return exitcode.Cancelled
 	case state.StatusLost:
-		fmt.Fprintf(env.Stderr, "forge: %s is LOST: %s\n", t.ID, t.LostReason)
-		fmt.Fprintln(env.Stderr, "forge: it may still be running. Check before re-running it.")
+		fmt.Fprintf(env.Stderr, "kranq: %s is LOST: %s\n", t.ID, t.LostReason)
+		fmt.Fprintln(env.Stderr, "kranq: it may still be running. Check before re-running it.")
 		return exitcode.InternalError
 	case state.StatusFailed:
 		if t.Error != "" {
-			fmt.Fprintf(env.Stderr, "forge: %s failed: %s\n", t.ID, t.Error)
+			fmt.Fprintf(env.Stderr, "kranq: %s failed: %s\n", t.ID, t.Error)
 			return exitcode.CouldNotStart
 		}
-		fmt.Fprintf(env.Stderr, "forge: %s exited %d\n", t.ID, t.ExitCode)
+		fmt.Fprintf(env.Stderr, "kranq: %s exited %d\n", t.ID, t.ExitCode)
 		return exitcode.FromTask(t.ExitCode)
 	}
-	fmt.Fprintf(env.Stderr, "forge: %s is %s\n", t.ID, t.Status)
+	fmt.Fprintf(env.Stderr, "kranq: %s is %s\n", t.ID, t.Status)
 	return exitcode.InternalError
 }
 
@@ -303,7 +303,7 @@ func waitForStart(ctx context.Context, client *ipc.Client, id string, env Env) {
 			return
 		}
 		if note := blockedNote(ctx, client, t); note != reported {
-			fmt.Fprintf(env.Stderr, "forge: %s\n", note)
+			fmt.Fprintf(env.Stderr, "kranq: %s\n", note)
 			reported = note
 		}
 		select {

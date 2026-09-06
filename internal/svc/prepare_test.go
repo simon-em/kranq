@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/state"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/state"
 )
 
 var caps = Capabilities{HasClaudeToken: true, TotalMemory: 16 << 30, TotalCPUs: 8}
@@ -138,19 +138,19 @@ func codeOf(err error) any {
 }
 
 func TestTheSpecCanNameItsBuildFileAndTheRequestOverridesIt(t *testing.T) {
-	spec := []byte("name: spec\nrepo: dx\nbranch: main\nforgefile: Forgefile.staging\nsteps:\n  - run: true\n")
+	spec := []byte("name: spec\nrepo: dx\nbranch: main\nkranqfile: Kranqfile.staging\nsteps:\n  - run: true\n")
 	t1, err := Prepare(SubmitRequest{SpecYAML: spec}, Capabilities{}, time.Now(), "id")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if t1.Forgefile != "Forgefile.staging" {
-		t.Errorf("setup file = %q, want the one the spec named", t1.Forgefile)
+	if t1.Kranqfile != "Kranqfile.staging" {
+		t.Errorf("setup file = %q, want the one the spec named", t1.Kranqfile)
 	}
-	t2, err := Prepare(SubmitRequest{SpecYAML: spec, Forgefile: "Forgefile.perf"}, Capabilities{}, time.Now(), "id")
+	t2, err := Prepare(SubmitRequest{SpecYAML: spec, Kranqfile: "Kranqfile.perf"}, Capabilities{}, time.Now(), "id")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if t2.Forgefile != "Forgefile.perf" {
-		t.Errorf("setup file = %q, want the request to win over the spec", t2.Forgefile)
+	if t2.Kranqfile != "Kranqfile.perf" {
+		t.Errorf("setup file = %q, want the request to win over the spec", t2.Kranqfile)
 	}
 }

@@ -1,13 +1,13 @@
 # The fence
 
 A task that pushes a branch and opens a pull request must do it at most once, even
-when forge loses track of the machine running it. forge cannot stop a partitioned
+when kranq loses track of the machine running it. kranq cannot stop a partitioned
 machine from continuing to run a job — no mechanism over any transport can halt a
 process on a machine you cannot reach. What it can do is make the *effect*
 conditional on a compare-and-swap at a service both attempts must reach anyway:
 the git server. A ref update is already a CAS.
 
-The fence is a ref, `refs/forge/fence/<16 hex>`, hashed from the effect's kind, the
+The fence is a ref, `refs/kranq/fence/<16 hex>`, hashed from the effect's kind, the
 repo and the branch. Its object is a parentless commit whose message is a JSON
 record naming the run that holds it.
 
@@ -46,16 +46,16 @@ of `HEAD:refs/heads/feature` plus a rejected fence update lands the branch anywa
 and reports failure. With it, both are rejected together. A test asserts the branch
 does not appear.
 
-**git rejects a single-segment ref as a "funny refname".** `refs/forge/fence/<h>`
+**git rejects a single-segment ref as a "funny refname".** `refs/kranq/fence/<h>`
 is three segments and fine; a fence ref must never be shortened to `refs/<h>`.
 
 **git fails loudly when the server does not support `--atomic`** ("the receiving end
-does not support --atomic push"), rather than silently degrading. forge maps that to
+does not support --atomic push"), rather than silently degrading. kranq maps that to
 `ErrNoAtomic` and refuses to push rather than pushing unfenced.
 
 Probed against git 2.50.1 over a local bare repo, which is the same receive-pack
 path a remote uses. **Not yet confirmed against Bitbucket Cloud**: whether it accepts
-writes to a custom `refs/forge/*` namespace is a hosting policy, not a git behaviour.
+writes to a custom `refs/kranq/*` namespace is a hosting policy, not a git behaviour.
 Confirm before the first fenced task runs for real.
 
 ## Verified end to end
@@ -67,14 +67,14 @@ git host so nothing external is touched:
 | --- | --- |
 | host claims before any image work | claimed, then the layers built |
 | a raw `git push` inside the VM | refused by the guard hook |
-| `forge_push` | fence advanced and branch created in one push |
+| `kranq_push` | fence advanced and branch created in one push |
 | clean finish | fence released, branch present |
 | a second run against a held fence | refused after checkout, no VM, no branch |
 | pushed then failed | fence held, phase `pushed`, holder named |
 | failed having pushed nothing | fence released |
 
 That last row happened by accident: a rerun failed on a non-fast-forward before
-reaching `forge_push`, and the fence was released exactly as intended, so an
+reaching `kranq_push`, and the fence was released exactly as intended, so an
 ordinary failure needs no human.
 
 ## Ownership is by content, not by object
@@ -100,13 +100,13 @@ released, so an ordinary failure never needs a human.
 
 When a spec sets `effects.push`, the script preamble gains two things:
 
-- `forge_push <refspec>...` — verifies the fence still names this run, then does the
+- `kranq_push <refspec>...` — verifies the fence still names this run, then does the
   atomic push above.
-- a `pre-push` hook that **fails any plain `git push`**, naming `forge_push` in the
+- a `pre-push` hook that **fails any plain `git push`**, naming `kranq_push` in the
   error. Without it the helper would be advisory, and one `git push` anywhere in a
   task would bypass the whole mechanism.
 
-`FORGE_FENCE_BYPASS=1` is how `forge_push` gets past its own hook.
+`KRANQ_FENCE_BYPASS=1` is how `kranq_push` gets past its own hook.
 
 ## Residual holes
 
@@ -114,7 +114,7 @@ Listed rather than papered over.
 
 - The gap between a fenced push and creating the pull request is unfenced.
 - A `run:` step that curls an API is unfenced. The fence covers git, nothing else.
-- `forge fence break` is a loaded gun. It asks for `--yes` and says so.
+- `kranq fence break` is a loaded gun. It asks for `--yes` and says so.
 - Breaking the fence of a run that is still alive stops its *next* push, not what it
   already did.
 
@@ -130,7 +130,7 @@ effects:
 ## Commands
 
 ```sh
-forge fence ls    --repo dx
-forge fence show  --repo dx <ref>
-forge fence break --repo dx <ref> --yes
+kranq fence ls    --repo dx
+kranq fence show  --repo dx <ref>
+kranq fence break --repo dx <ref> --yes
 ```

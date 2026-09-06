@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/effetmonstre/forge/internal/fence"
-	"github.com/effetmonstre/forge/internal/vm"
+	"github.com/simon-em/kranq/internal/fence"
+	"github.com/simon-em/kranq/internal/vm"
 )
 
 // A local bare repo stands in for the git host: Remote.URL() with no token is
@@ -56,7 +56,7 @@ func TestASecondRunIsRefusedWhileTheFirstHoldsTheFence(t *testing.T) {
 	blocked := make(chan struct{})
 	release := make(chan struct{})
 	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
-		if strings.Contains(script, "forge-task.sh") {
+		if strings.Contains(script, "kranq-task.sh") {
 			close(blocked)
 			<-release
 		}
@@ -74,7 +74,7 @@ func TestASecondRunIsRefusedWhileTheFirstHoldsTheFence(t *testing.T) {
 	if !errors.Is(err, fence.ErrHeld) {
 		t.Fatalf("a second run started while the first held the fence: %v", err)
 	}
-	if !strings.Contains(err.Error(), "forge fence break") {
+	if !strings.Contains(err.Error(), "kranq fence break") {
 		t.Fatalf("the refusal does not say how to resolve it: %v", err)
 	}
 }
@@ -85,7 +85,7 @@ func TestAFailedRunThatPushedNothingReleasesItsFence(t *testing.T) {
 	req, reader := fencedRequest(t)
 	f := vm.NewFake()
 	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
-		if strings.Contains(script, "forge-task.sh") {
+		if strings.Contains(script, "kranq-task.sh") {
 			return 1, nil
 		}
 		return 0, nil
@@ -111,7 +111,7 @@ func TestAFailedRunThatPushedHoldsItsFence(t *testing.T) {
 	req, reader := fencedRequest(t)
 	f := vm.NewFake()
 	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
-		if !strings.Contains(script, "forge-task.sh") {
+		if !strings.Contains(script, "kranq-task.sh") {
 			return 0, nil
 		}
 		advanceFence(t, req)
@@ -133,7 +133,7 @@ func TestAFailedRunThatPushedHoldsItsFence(t *testing.T) {
 	}
 }
 
-// Stands in for forge_push inside the VM, which is what moves the fence off the
+// Stands in for kranq_push inside the VM, which is what moves the fence off the
 // object the host claimed.
 func advanceFence(t *testing.T, req Request) {
 	t.Helper()

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
+	"github.com/simon-em/kranq/internal/exitcode"
 )
 
 // A fake ssh and scp on PATH, so the whole deploy path is exercised without a
@@ -14,25 +14,25 @@ import (
 type fakeSSH struct {
 	dir         string
 	log         string
-	forgeExists bool
+	kranqExists bool
 	arch        string
 }
 
-func withFakeSSH(t *testing.T, arch string, forgeExists bool) *fakeSSH {
+func withFakeSSH(t *testing.T, arch string, kranqExists bool) *fakeSSH {
 	t.Helper()
 	dir := t.TempDir()
-	f := &fakeSSH{dir: dir, log: filepath.Join(dir, "log"), forgeExists: forgeExists, arch: arch}
+	f := &fakeSSH{dir: dir, log: filepath.Join(dir, "log"), kranqExists: kranqExists, arch: arch}
 
-	forgeReply := "exit 127"
-	if forgeExists {
-		forgeReply = `echo '{"version":"0.1.0"}'; exit 0`
+	kranqReply := "exit 127"
+	if kranqExists {
+		kranqReply = `echo '{"version":"0.1.0"}'; exit 0`
 	}
 	ssh := "#!/bin/sh\n" +
 		"printf '%s\\n' \"$*\" >> " + f.log + "\n" +
 		"last=\"${@: -1}\"\n" +
 		"case \"$last\" in\n" +
 		"  *'uname -m'*) echo " + arch + "; exit 0 ;;\n" +
-		"  *version*) " + forgeReply + " ;;\n" +
+		"  *version*) " + kranqReply + " ;;\n" +
 		"  *doctor*) echo 'ok everything fine'; exit 0 ;;\n" +
 		"esac\n" +
 		"exit 0\n"
@@ -45,7 +45,7 @@ func withFakeSSH(t *testing.T, arch string, forgeExists bool) *fakeSSH {
 	}
 
 	t.Setenv("PATH", dir+":"+os.Getenv("PATH"))
-	t.Setenv("FORGE_HOME", filepath.Join(dir, "home"))
+	t.Setenv("KRANQ_HOME", filepath.Join(dir, "home"))
 	return f
 }
 
@@ -65,7 +65,7 @@ func addPeer(t *testing.T, args ...string) {
 	}
 }
 
-func TestPeerUpgradeInstallsWhenNoForgeIsThere(t *testing.T) {
+func TestPeerUpgradeInstallsWhenNoKranqIsThere(t *testing.T) {
 	f := withFakeSSH(t, "arm64", false)
 	addPeer(t, "mini-1", "--ssh", "macmini@host:333")
 
@@ -78,14 +78,14 @@ func TestPeerUpgradeInstallsWhenNoForgeIsThere(t *testing.T) {
 		t.Fatalf("nothing was copied:\n%s", calls)
 	}
 	if !strings.Contains(calls, "install") {
-		t.Fatalf("a machine with no forge did not get an install:\n%s", calls)
+		t.Fatalf("a machine with no kranq did not get an install:\n%s", calls)
 	}
 	if strings.Contains(calls, " upgrade ") {
-		t.Fatalf("a machine with no forge was told to upgrade:\n%s", calls)
+		t.Fatalf("a machine with no kranq was told to upgrade:\n%s", calls)
 	}
 }
 
-func TestPeerUpgradeUpgradesAnExistingForge(t *testing.T) {
+func TestPeerUpgradeUpgradesAnExistingKranq(t *testing.T) {
 	f := withFakeSSH(t, "arm64", true)
 	addPeer(t, "mini-1", "--ssh", "macmini@host:333")
 
@@ -112,7 +112,7 @@ func TestPeerUpgradePassesForceThrough(t *testing.T) {
 	}
 }
 
-// The default forge path starts with ~, and a single-quoted tilde is a literal
+// The default kranq path starts with ~, and a single-quoted tilde is a literal
 // directory named "~" rather than the home directory.
 func TestPeerUpgradeLetsTheRemoteTildeExpand(t *testing.T) {
 	f := withFakeSSH(t, "arm64", true)
@@ -123,7 +123,7 @@ func TestPeerUpgradeLetsTheRemoteTildeExpand(t *testing.T) {
 	if strings.Contains(calls, "'~/") {
 		t.Fatalf("the remote path was single-quoted, so ~ will not expand:\n%s", calls)
 	}
-	if !strings.Contains(calls, `"$HOME/.local/bin/forge"`) {
+	if !strings.Contains(calls, `"$HOME/.local/bin/kranq"`) {
 		t.Fatalf("the remote path did not go through $HOME:\n%s", calls)
 	}
 }
@@ -155,7 +155,7 @@ func TestPeerCommandsNeedAPeer(t *testing.T) {
 	}
 }
 
-func TestPeerTestReportsAMachineWithNoForge(t *testing.T) {
+func TestPeerTestReportsAMachineWithNoKranq(t *testing.T) {
 	withFakeSSH(t, "arm64", false)
 	addPeer(t, "mini-1", "--ssh", "macmini@host:333")
 	code, _, errb := invoke(t, "peer", "test", "mini-1")

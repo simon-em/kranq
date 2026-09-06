@@ -131,7 +131,7 @@ func (c *Client) Show(ctx context.Context, ref string) (Entry, error) {
 
 func (c *Client) readHolder(ctx context.Context, ref, oid string) (Holder, error) {
 	var h Holder
-	local := "refs/forge/read/" + oid
+	local := "refs/kranq/read/" + oid
 	if _, stderr, err := c.git(ctx, "", "fetch", "--quiet", "--force", c.URL, ref+":"+local); err != nil {
 		return h, fmt.Errorf("fetching %s: %w: %s", ref, err, strings.TrimSpace(stderr))
 	}
@@ -140,7 +140,7 @@ func (c *Client) readHolder(ctx context.Context, ref, oid string) (Holder, error
 		return h, fmt.Errorf("reading %s: %w: %s", ref, err, strings.TrimSpace(stderr))
 	}
 	if err := json.Unmarshal([]byte(strings.TrimSpace(body)), &h); err != nil {
-		return h, fmt.Errorf("the fence record at %s is not a forge record", ref)
+		return h, fmt.Errorf("the fence record at %s is not a kranq record", ref)
 	}
 	return h, nil
 }

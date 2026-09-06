@@ -295,7 +295,7 @@ func TestExhaustionEmitsTheResetTimeForTheScheduler(t *testing.T) {
 	cmd.Env = append(os.Environ(), "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	out, _ := cmd.CombinedOutput()
 
-	if !strings.Contains(string(out), "FORGE-GATE exhausted resets_at=1788468000 window=five_hour") {
+	if !strings.Contains(string(out), "KRANQ-GATE exhausted resets_at=1788468000 window=five_hour") {
 		t.Errorf("the reset time was not surfaced, so the scheduler can only poll blindly:\n%s", out)
 	}
 }

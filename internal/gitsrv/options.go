@@ -97,9 +97,9 @@ func Redact(options []string) []string {
 // A push's exit status only says whether the push was accepted, never what the
 // run did, because post-receive runs after the ref has already moved. The hook
 // prints this line instead and the client exits on it.
-const ResultMarker = "FORGE-RESULT"
+const ResultMarker = "KRANQ-RESULT"
 
-// StatusRefused marks a run that never started, so its code is forge's own and
+// StatusRefused marks a run that never started, so its code is kranq's own and
 // passes through instead of being folded into a generic failure the way a
 // task's code in the reserved range is.
 const StatusRefused = "refused"
@@ -114,7 +114,7 @@ type Result struct {
 func ParseResult(output string) Result {
 	var res Result
 	for _, line := range strings.Split(output, "\n") {
-		// The trailing space matters: without it FORGE-RESULTS, or any longer
+		// The trailing space matters: without it KRANQ-RESULTS, or any longer
 		// word starting the same way, would be read as a result line.
 		idx := strings.Index(line, ResultMarker+" ")
 		if idx < 0 {

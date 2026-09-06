@@ -54,7 +54,7 @@ for raw in sys.stdin:
         if info.get("status") not in ("allowed", None):
             exhausted = True
             resets_at = info.get("resetsAt") or window.get("resetsAt") or 0
-            out("FORGE-GATE exhausted resets_at=%d window=%s" % (
+            out("KRANQ-GATE exhausted resets_at=%d window=%s" % (
                 int(resets_at), info.get("rateLimitType", "unknown")))
     elif kind in ("assistant", "user"):
         blocks = (ev.get("message") or {}).get("content")

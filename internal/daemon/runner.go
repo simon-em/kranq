@@ -7,11 +7,11 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/fence"
-	"github.com/effetmonstre/forge/internal/jobproc"
-	"github.com/effetmonstre/forge/internal/run"
-	"github.com/effetmonstre/forge/internal/sshagent"
-	"github.com/effetmonstre/forge/internal/state"
+	"github.com/simon-em/kranq/internal/fence"
+	"github.com/simon-em/kranq/internal/jobproc"
+	"github.com/simon-em/kranq/internal/run"
+	"github.com/simon-em/kranq/internal/sshagent"
+	"github.com/simon-em/kranq/internal/state"
 )
 
 type Runner struct {
@@ -38,7 +38,7 @@ func (r *Runner) fence(t state.Task) *run.FencePlan {
 }
 
 // A pushed source needs no credential and no network: the code is already here,
-// so the host reads the Forgefile straight out of it and the VM gets a bare
+// so the host reads the Kranqfile straight out of it and the VM gets a bare
 // repository holding exactly the one commit.
 func (r *Runner) source(ctx context.Context, t state.Task, work, checkout string, out *os.File) (run.Source, error) {
 	if t.SourceCommit == "" || r.SourceRepos == "" {
@@ -65,7 +65,7 @@ func short(sha string) string {
 }
 
 // Run does the whole job in this process: checkout, VM, artifacts, fence. It is
-// what `forge exec` calls, so the work outlives the daemon that asked for it and
+// what `kranq exec` calls, so the work outlives the daemon that asked for it and
 // a restart can pick the result back up instead of throwing the run away.
 func (r *Runner) Run(ctx context.Context, t state.Task, script string, out *os.File) jobproc.Result {
 	res, err := r.execute(ctx, t, script, out)
@@ -96,7 +96,7 @@ func (r *Runner) execute(ctx context.Context, t state.Task, script string, out *
 		os.Setenv("SSH_AUTH_SOCK", sock)
 	}
 
-	work, err := os.MkdirTemp("", "forge-task-*")
+	work, err := os.MkdirTemp("", "kranq-task-*")
 	if err != nil {
 		return empty, err
 	}
@@ -128,6 +128,6 @@ func (r *Runner) execute(ctx context.Context, t state.Task, script string, out *
 		Keep:        keep,
 		Fence:       r.fence(t),
 		Source:      source,
-		Forgefile:   t.Forgefile,
+		Kranqfile:   t.Kranqfile,
 	}, out)
 }

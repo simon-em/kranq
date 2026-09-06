@@ -12,13 +12,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/effetmonstre/forge/internal/task"
+	"github.com/simon-em/kranq/internal/task"
 )
 
 const (
-	DefaultFile    = "Forgefile"
-	DefaultWorkdir = "/forge/build"
-	CopyStage      = "/tmp/forge-stage"
+	DefaultFile    = "Kranqfile"
+	DefaultWorkdir = "/kranq/build"
+	CopyStage      = "/tmp/kranq-stage"
 )
 
 type Build struct {

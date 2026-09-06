@@ -116,7 +116,7 @@ func TestResetForcesTheGateOpen(t *testing.T) {
 	g.MarkExhaustedUntil(now.Add(6*time.Hour), "exhausted")
 	g.Reset()
 	if !g.Available() || g.State().Exhaustions != 0 {
-		t.Error("Reset must fully clear the gate, so an operator can act on knowledge forge does not have")
+		t.Error("Reset must fully clear the gate, so an operator can act on knowledge kranq does not have")
 	}
 }
 

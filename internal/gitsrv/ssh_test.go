@@ -26,7 +26,7 @@ func TestParseSSHCommandAcceptsWhatGitActuallySends(t *testing.T) {
 }
 
 // This is the whole security boundary of the ssh path: a forced command runs as
-// the forge user, and anything that gets past here runs with it.
+// the kranq user, and anything that gets past here runs with it.
 func TestParseSSHCommandRefusesEverythingElse(t *testing.T) {
 	for _, in := range []string{
 		"",
@@ -114,16 +114,16 @@ func TestAnSSHPathMustBeExactlyOneSegment(t *testing.T) {
 	}
 }
 
-// The other way in: `git push --receive-pack="forge git-receive"` makes git run
-// forge with the repository as an argument, so no forced command and no
-// forge-specific key are involved. Anyone who can already ssh here can push.
+// The other way in: `git push --receive-pack="kranq git-receive"` makes git run
+// kranq with the repository as an argument, so no forced command and no
+// kranq-specific key are involved. Anyone who can already ssh here can push.
 func TestRepoFromPath(t *testing.T) {
 	cases := map[string]string{
 		"dx.git":                             "dx",
 		"/dx.git":                            "dx",
 		"dx":                                 "dx",
-		"/Users/macmini/.forge/repos/dx.git": "dx",
-		"~/.forge/repos/my-repo.git":         "my-repo",
+		"/Users/macmini/.kranq/repos/dx.git": "dx",
+		"~/.kranq/repos/my-repo.git":         "my-repo",
 	}
 	for in, want := range cases {
 		got, err := RepoFromPath(in)
@@ -143,27 +143,27 @@ func TestRepoFromPath(t *testing.T) {
 
 // A client set up for the no-setup path, pushing to a key whose forced command
 // already decides what runs, must not be refused by the parser.
-func TestAForcedCommandAcceptsForgesOwnReceivePack(t *testing.T) {
-	got, err := ParseSSHCommand(`/Users/macmini/.local/bin/forge git-receive 'dx.git'`)
+func TestAForcedCommandAcceptsKranqsOwnReceivePack(t *testing.T) {
+	got, err := ParseSSHCommand(`/Users/macmini/.local/bin/kranq git-receive 'dx.git'`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got.Verb != VerbReceive || got.Repo != "dx" {
 		t.Fatalf("%+v", got)
 	}
-	up, err := ParseSSHCommand(`/Users/macmini/.local/bin/forge git-upload 'dx.git'`)
+	up, err := ParseSSHCommand(`/Users/macmini/.local/bin/kranq git-upload 'dx.git'`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if up.Verb != VerbUpload {
 		t.Fatalf("%+v", up)
 	}
-	// But forge is not a way to run anything else.
+	// But kranq is not a way to run anything else.
 	for _, bad := range []string{
-		`/Users/macmini/.local/bin/forge daemon stop`,
-		`/Users/macmini/.local/bin/forge exec some-task`,
-		`/Users/macmini/.local/bin/forge auth claude --show`,
-		`forge config set X=1`,
+		`/Users/macmini/.local/bin/kranq daemon stop`,
+		`/Users/macmini/.local/bin/kranq exec some-task`,
+		`/Users/macmini/.local/bin/kranq auth claude --show`,
+		`kranq config set X=1`,
 	} {
 		if _, err := ParseSSHCommand(bad); err == nil {
 			t.Fatalf("%q was accepted", bad)

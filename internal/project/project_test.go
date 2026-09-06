@@ -22,7 +22,7 @@ func checkout(t *testing.T, files map[string]string) string {
 	return dir
 }
 
-const dxForgefile = "# dx\n" +
+const dxKranqfile = "# dx\n" +
 	"MEMORY 3GiB\n" +
 	"CPUS 4\n" +
 	"\n" +
@@ -40,7 +40,7 @@ const dxForgefile = "# dx\n" +
 
 func dxCheckout(t *testing.T) string {
 	return checkout(t, map[string]string{
-		DefaultFile:     dxForgefile,
+		DefaultFile:     dxKranqfile,
 		".ruby-version": "3.4.1\n",
 		"Gemfile":       "source 'https://rubygems.org'\n",
 		"Gemfile.lock":  "GEM\n",
@@ -61,7 +61,7 @@ func TestRunIsTheLayerBoundary(t *testing.T) {
 	if len(p.Layers[0].Files) != 0 {
 		t.Errorf("the first RUN copies nothing, got %+v", p.Layers[0].Files)
 	}
-	if len(p.Layers[1].Files) != 1 || p.Layers[1].Files[0].Dest != "/forge/build/.ruby-version" {
+	if len(p.Layers[1].Files) != 1 || p.Layers[1].Files[0].Dest != "/kranq/build/.ruby-version" {
 		t.Errorf("COPY did not fold into the RUN after it: %+v", p.Layers[1].Files)
 	}
 	if len(p.Layers[2].Files) != 2 {
@@ -119,7 +119,7 @@ func TestWorkdirAppliesToWhatFollowsIt(t *testing.T) {
 	for _, f := range p.Layers[0].Files {
 		dests[f.Dest] = true
 	}
-	if !dests["/forge/build/a"] || !dests["/app/b"] {
+	if !dests["/kranq/build/a"] || !dests["/app/b"] {
 		t.Errorf("dests = %v, want a under the default workdir and b under /app", dests)
 	}
 	if p.Layers[0].Dir() != "/app" {
@@ -176,9 +176,9 @@ func TestATrailingCopyStillBecomesALayer(t *testing.T) {
 	}
 }
 
-func TestACustomForgefileIsRead(t *testing.T) {
-	dir := checkout(t, map[string]string{"Forgefile.staging": "RUN true\n"})
-	p, err := Load(dir, "Forgefile.staging")
+func TestACustomKranqfileIsRead(t *testing.T) {
+	dir := checkout(t, map[string]string{"Kranqfile.staging": "RUN true\n"})
+	p, err := Load(dir, "Kranqfile.staging")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestCopyCarriesContentNotJustAName(t *testing.T) {
 func TestGlobsResolve(t *testing.T) {
 	dir := checkout(t, map[string]string{
 		DefaultFile:     "COPY *.gemspec .\nRUN true\n",
-		"forge.gemspec": "spec\n",
+		"kranq.gemspec": "spec\n",
 		"other.gemspec": "other\n",
 	})
 	p, err := Load(dir, "")
@@ -253,11 +253,11 @@ func TestOnlyTheExecutableBitSurvives(t *testing.T) {
 	for _, f := range p.Layers[0].Files {
 		modes[f.Dest] = f.Mode.String()
 	}
-	if modes["/forge/build/setup"] != "-rwxr-xr-x" {
-		t.Errorf("bin/setup mode = %s, want it normalised to 0755", modes["/forge/build/setup"])
+	if modes["/kranq/build/setup"] != "-rwxr-xr-x" {
+		t.Errorf("bin/setup mode = %s, want it normalised to 0755", modes["/kranq/build/setup"])
 	}
-	if modes["/forge/build/README"] != "-rw-r--r--" {
-		t.Errorf("README mode = %s, want it normalised to 0644", modes["/forge/build/README"])
+	if modes["/kranq/build/README"] != "-rw-r--r--" {
+		t.Errorf("README mode = %s, want it normalised to 0644", modes["/kranq/build/README"])
 	}
 }
 
@@ -278,7 +278,7 @@ func TestASymlinkIsRefusedRatherThanFollowed(t *testing.T) {
 	}
 }
 
-// Someone will paste a Dockerfile in. The error should say what forge does
+// Someone will paste a Dockerfile in. The error should say what kranq does
 // instead, not "unknown instruction".
 func TestDockerfileOnlyInstructionsAreRefusedByName(t *testing.T) {
 	for verb, want := range map[string]string{
@@ -303,7 +303,7 @@ func TestDockerfileOnlyInstructionsAreRefusedByName(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsABadForgefile(t *testing.T) {
+func TestLoadRejectsABadKranqfile(t *testing.T) {
 	cases := map[string]string{
 		"empty":               "\n# only a comment\n",
 		"unknown instruction": "INSTALL jq\n",
@@ -344,7 +344,7 @@ func TestContinuationsAreJoined(t *testing.T) {
 	}
 }
 
-func TestMissingForgefileSaysSo(t *testing.T) {
+func TestMissingKranqfileSaysSo(t *testing.T) {
 	_, err := Load(t.TempDir(), "")
 	if err == nil || !strings.Contains(err.Error(), DefaultFile) {
 		t.Errorf("error = %v, want it to name %s", err, DefaultFile)

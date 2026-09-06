@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/gate"
-	"github.com/effetmonstre/forge/internal/hostres"
-	"github.com/effetmonstre/forge/internal/state"
-	"github.com/effetmonstre/forge/internal/task"
+	"github.com/simon-em/kranq/internal/gate"
+	"github.com/simon-em/kranq/internal/hostres"
+	"github.com/simon-em/kranq/internal/state"
+	"github.com/simon-em/kranq/internal/task"
 )
 
 type fakeExec struct {
@@ -379,7 +379,7 @@ func TestExhaustionWaitsForAKnownResetRatherThanPollingBlindly(t *testing.T) {
 	queue(t, store, "claude", *now, claudeSpec)
 
 	resets := time.Now().Add(3 * time.Hour)
-	logLine := "FORGE-GATE exhausted resets_at=" + strconv.FormatInt(resets.Unix(), 10) + " window=five_hour\n"
+	logLine := "KRANQ-GATE exhausted resets_at=" + strconv.FormatInt(resets.Unix(), 10) + " window=five_hour\n"
 	if err := os.MkdirAll(store.Dir("claude"), 0o700); err != nil {
 		t.Fatal(err)
 	}

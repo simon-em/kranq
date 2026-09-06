@@ -6,14 +6,14 @@ import (
 )
 
 func TestPlistCarriesTheDaemonCommandAndHome(t *testing.T) {
-	p := Service{Binary: "/Users/me/.local/bin/forge", Home: "/Users/me/.forge"}.Plist()
+	p := Service{Binary: "/Users/me/.local/bin/kranq", Home: "/Users/me/.kranq"}.Plist()
 	for _, want := range []string{
-		"<string>/Users/me/.local/bin/forge</string>",
+		"<string>/Users/me/.local/bin/kranq</string>",
 		"<string>daemon</string>",
 		"<string>run</string>",
-		"<key>FORGE_HOME</key>",
-		"<string>/Users/me/.forge</string>",
-		"/Users/me/.forge/daemon.log",
+		"<key>KRANQ_HOME</key>",
+		"<string>/Users/me/.kranq</string>",
+		"/Users/me/.kranq/daemon.log",
 	} {
 		if !strings.Contains(p, want) {
 			t.Errorf("plist is missing %q:\n%s", want, p)
@@ -24,7 +24,7 @@ func TestPlistCarriesTheDaemonCommandAndHome(t *testing.T) {
 func TestPlistRestartsOnCrashButNotOnACleanExit(t *testing.T) {
 	p := Service{Binary: "/f", Home: "/h"}.Plist()
 	if !strings.Contains(p, "<key>SuccessfulExit</key>\n    <false/>") {
-		t.Errorf("KeepAlive must not restart after a clean stop, or `forge daemon stop` fights launchd:\n%s", p)
+		t.Errorf("KeepAlive must not restart after a clean stop, or `kranq daemon stop` fights launchd:\n%s", p)
 	}
 }
 
@@ -34,7 +34,7 @@ func TestThePlistCannotCarryASecret(t *testing.T) {
 		t.Errorf("~/Library/LaunchAgents is world-readable, so the plist must carry no credential "+
 			"at all; the daemon reads them from a 0600 env file instead:\n%s", p)
 	}
-	if !strings.Contains(p, "<key>FORGE_HOME</key>") {
+	if !strings.Contains(p, "<key>KRANQ_HOME</key>") {
 		t.Error("the plist still needs to say where state lives")
 	}
 }

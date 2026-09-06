@@ -6,7 +6,7 @@ import (
 )
 
 func TestShortPathsAreLeftAlone(t *testing.T) {
-	want := "/Users/me/.forge/agent.sock"
+	want := "/Users/me/.kranq/agent.sock"
 	if got := For(want); got != want {
 		t.Errorf("For(%q) = %q, want it unchanged", want, got)
 	}

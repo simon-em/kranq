@@ -62,12 +62,12 @@ const MaxSocketPath = 103
 func SocketPath(path string) Check {
 	const name = "socket path"
 	if len(path) > MaxSocketPath {
-		return fail(name, "set FORGE_HOME to something shorter",
+		return fail(name, "set KRANQ_HOME to something shorter",
 			"%s is %d bytes; macOS refuses to bind a unix socket longer than %d",
 			path, len(path), MaxSocketPath)
 	}
 	if len(path) > MaxSocketPath-16 {
-		return warn(name, "consider a shorter FORGE_HOME",
+		return warn(name, "consider a shorter KRANQ_HOME",
 			"%s is %d bytes, within %d of the %d-byte limit",
 			path, len(path), MaxSocketPath-len(path), MaxSocketPath)
 	}
@@ -101,22 +101,22 @@ func GitVersion(output string) Check {
 	return ok(name, "%d.%d", major, minor)
 }
 
-// forge invokes its own limactl by absolute path so a Homebrew lima appearing or
+// kranq invokes its own limactl by absolute path so a Homebrew lima appearing or
 // disappearing cannot change what runs.
 func LimaSource(binary, root string, autoInstall bool) Check {
 	const name = "lima"
 	if binary == "" {
 		if autoInstall {
 			// Not a failure: the next command that needs a VM fetches it. Saying
-			// "run forge install" here would send someone to do by hand what is
+			// "run kranq install" here would send someone to do by hand what is
 			// about to happen on its own.
 			return warn(name, "", "not installed yet; the next job fetches it into %s/deps", root)
 		}
-		return fail(name, "forge install --deps-only",
+		return fail(name, "kranq install --deps-only",
 			"not installed, and this machine does not fetch it automatically")
 	}
 	if !strings.HasPrefix(binary, root) {
-		return warn(name, "forge install", "using %s, which forge does not manage", binary)
+		return warn(name, "kranq install", "using %s, which kranq does not manage", binary)
 	}
 	return ok(name, "%s", binary)
 }
@@ -127,10 +127,10 @@ func DiskSpace(free, want int64) Check {
 	case free <= 0:
 		return warn(name, "", "could not measure free space")
 	case free < want:
-		return fail(name, "free some space or prune images with `forge image prune`",
+		return fail(name, "free some space or prune images with `kranq image prune`",
 			"%s free, and one image pair needs about %s", human(free), human(want))
 	case free < want*2:
-		return warn(name, "`forge image prune` reclaims old layers",
+		return warn(name, "`kranq image prune` reclaims old layers",
 			"%s free, enough for about one image pair", human(free))
 	}
 	return ok(name, "%s free", human(free))
@@ -159,17 +159,17 @@ func OrphanVMs(vms, owned []string) Check {
 	if len(orphans) == 0 {
 		return ok(name, "none")
 	}
-	return warn(name, "`forge vm rm "+orphans[0]+"` for each, once you have looked at them",
+	return warn(name, "`kranq vm rm "+orphans[0]+"` for each, once you have looked at them",
 		"%d job VM(s) belong to no live task: %s", len(orphans), strings.Join(orphans, ", "))
 }
 
 func VersionMatch(cli, daemon string) Check {
 	const name = "daemon version"
 	if daemon == "" {
-		return warn(name, "forge daemon start", "the daemon is not running")
+		return warn(name, "kranq daemon start", "the daemon is not running")
 	}
 	if cli != daemon {
-		return warn(name, "forge daemon restart", "cli is %s, the running daemon is %s", cli, daemon)
+		return warn(name, "kranq daemon restart", "cli is %s, the running daemon is %s", cli, daemon)
 	}
 	return ok(name, "%s", daemon)
 }

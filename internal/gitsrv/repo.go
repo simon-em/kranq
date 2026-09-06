@@ -13,7 +13,7 @@ import (
 var repoNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
 
 // The repo name arrives in a URL path from an authenticated but untrusted
-// caller, and becomes a directory under the forge home. Anything that is not a
+// caller, and becomes a directory under the kranq home. Anything that is not a
 // single plain segment is refused rather than cleaned, because a cleaned path
 // is a path someone reasoned about wrongly.
 func ValidRepo(name string) error {
@@ -38,7 +38,7 @@ func RepoName(urlPath string) (string, error) {
 
 type Store struct {
 	Root       string
-	ForgeBin   string
+	KranqBin   string
 	SocketPath string
 }
 
@@ -84,7 +84,7 @@ func (s *Store) Ensure(ctx context.Context, repo string) (string, error) {
 }
 
 const hookTemplate = `#!/bin/sh
-# Written by forge. Edits are overwritten.
+# Written by kranq. Edits are overwritten.
 exec %s git-hook %s --repo %s --socket %s
 `
 
@@ -95,7 +95,7 @@ func (s *Store) writeHooks(dir string) error {
 	}
 	repo := strings.TrimSuffix(filepath.Base(dir), ".git")
 	for _, phase := range []string{"pre-receive", "post-receive"} {
-		body := fmt.Sprintf(hookTemplate, shellQuote(s.ForgeBin), phase, shellQuote(repo), shellQuote(s.SocketPath))
+		body := fmt.Sprintf(hookTemplate, shellQuote(s.KranqBin), phase, shellQuote(repo), shellQuote(s.SocketPath))
 		if err := os.WriteFile(filepath.Join(hooks, phase), []byte(body), 0o700); err != nil {
 			return err
 		}

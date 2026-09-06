@@ -159,10 +159,10 @@ func TestTheCurrentSymlinkIsSwappedAtomically(t *testing.T) {
 }
 
 func TestLimaIsNotOnTheGlobalPath(t *testing.T) {
-	l := Lima{Root: "/Users/someone/.forge"}
-	if !strings.Contains(l.Binary(), ".forge/deps/current/bin/limactl") {
-		t.Errorf("Binary() = %q; lima must live under FORGE_HOME and be invoked by absolute path, "+
-			"so a homebrew lima appearing or disappearing cannot break forge", l.Binary())
+	l := Lima{Root: "/Users/someone/.kranq"}
+	if !strings.Contains(l.Binary(), ".kranq/deps/current/bin/limactl") {
+		t.Errorf("Binary() = %q; lima must live under KRANQ_HOME and be invoked by absolute path, "+
+			"so a homebrew lima appearing or disappearing cannot break kranq", l.Binary())
 	}
 }
 

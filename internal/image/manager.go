@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/project"
-	"github.com/effetmonstre/forge/internal/vm"
+	"github.com/simon-em/kranq/internal/project"
+	"github.com/simon-em/kranq/internal/vm"
 )
 
 const DefaultTTL = 14 * 24 * time.Hour
@@ -101,7 +101,7 @@ func (m *Manager) touchChain(plan Plan, repo string) {
 }
 
 // once builds name unless it is already a finished image, holding a lock other
-// forge processes honour and re-checking inside it. It reports whether build
+// kranq processes honour and re-checking inside it. It reports whether build
 // ran, which is the difference between "cached" and "built" in the log.
 func (m *Manager) once(name string, build func() error) (bool, error) {
 	if m.complete(name) {
@@ -245,7 +245,7 @@ func (m *Manager) upload(ctx context.Context, name string, l project.Resolved, o
 	if len(l.Files) == 0 {
 		return nil
 	}
-	stage, err := os.MkdirTemp("", "forge-layer-*")
+	stage, err := os.MkdirTemp("", "kranq-layer-*")
 	if err != nil {
 		return err
 	}
@@ -309,7 +309,7 @@ func exports(env []project.EnvVar) string {
 
 func (m *Manager) Destroy(ctx context.Context, name string) error {
 	if !Managed(name) {
-		return fmt.Errorf("refusing to destroy %q: not a forge instance", name)
+		return fmt.Errorf("refusing to destroy %q: not a kranq instance", name)
 	}
 	_ = m.Driver.Stop(ctx, name, true)
 	err := m.Driver.Delete(ctx, name)
@@ -348,7 +348,7 @@ func (m *Manager) Prune(ctx context.Context, protect ...string) ([]string, error
 			layers = append(layers, inst)
 		case IsBase(inst.Name):
 			bases = append(bases, inst)
-		case strings.HasPrefix(inst.Name, LegacyProjectPrefix+"-"):
+		case Legacy(inst.Name):
 			legacy = append(legacy, inst)
 		}
 	}
@@ -386,7 +386,7 @@ func (m *Manager) Prune(ctx context.Context, protect ...string) ([]string, error
 }
 
 // A head is a layer nothing else is built on, so it is the layer a project
-// actually clones for a run. Ordering is by last use; a layer forge has no
+// actually clones for a run. Ordering is by last use; a layer kranq has no
 // record of sorts oldest and is therefore the first to go.
 func heads(layers []vm.Instance, metas map[string]Meta, exists map[string]bool) []string {
 	hasChild := map[string]bool{}

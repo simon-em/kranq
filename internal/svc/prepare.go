@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/state"
-	"github.com/effetmonstre/forge/internal/task"
+	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/state"
+	"github.com/simon-em/kranq/internal/task"
 )
 
 type Error struct {
@@ -34,7 +34,7 @@ type SubmitRequest struct {
 	Env          map[string]string
 	Keep         string
 	SourceCommit string
-	Forgefile    string
+	Kranqfile    string
 }
 
 func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (state.Task, error) {
@@ -78,7 +78,7 @@ func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (st
 		MemoryBytes:  memory,
 		CPUs:         spec.Resources.CPUs,
 		SpecYAML:     string(req.SpecYAML),
-		Forgefile:    firstNonEmpty(req.Forgefile, spec.Forgefile),
+		Kranqfile:    firstNonEmpty(req.Kranqfile, spec.Kranqfile),
 		Env:          req.Env,
 		Keep:         req.Keep,
 		SourceCommit: req.SourceCommit,
