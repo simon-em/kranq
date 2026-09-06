@@ -61,6 +61,7 @@ type Request struct {
 	Keep        KeepPolicy
 	Fence       *FencePlan
 	Source      Source
+	Forgefile   string
 }
 
 type Result struct {
@@ -81,7 +82,7 @@ type Engine struct {
 
 func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res Result, err error) {
 
-	proj, err := project.Load(req.Checkout)
+	proj, err := project.Load(req.Checkout, req.Forgefile)
 	if err != nil {
 		return res, err
 	}
@@ -95,16 +96,16 @@ func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res R
 	}
 	defer func() { e.settleFence(context.WithoutCancel(ctx), held, &res, out) }()
 
-	plan, err := e.Images.Ensure(ctx, req.Repo, req.Ref, proj, out)
+	plan, err := e.Images.Ensure(ctx, req.Repo, proj, out)
 	if err != nil {
 		return res, err
 	}
-	res.Image = plan.Project
+	res.Image = plan.Image()
 
 	name := image.RunName(req.Repo, req.Label, req.TaskID)
 	res.VMName = name
-	fmt.Fprintf(out, "cloning %s into %s\n", plan.Project, name)
-	if err := e.Driver.Clone(ctx, plan.Project, name, vm.Resources{}); err != nil {
+	fmt.Fprintf(out, "cloning %s into %s\n", plan.Image(), name)
+	if err := e.Driver.Clone(ctx, plan.Image(), name, image.Sized(proj)); err != nil {
 		return res, fmt.Errorf("cloning the project image: %w", err)
 	}
 	failed := true

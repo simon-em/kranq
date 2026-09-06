@@ -38,7 +38,7 @@ func (r *Runner) fence(t state.Task) *run.FencePlan {
 }
 
 // A pushed source needs no credential and no network: the code is already here,
-// so the host reads ci/setup.yaml straight out of it and the VM gets a bare
+// so the host reads the Forgefile straight out of it and the VM gets a bare
 // repository holding exactly the one commit.
 func (r *Runner) source(ctx context.Context, t state.Task, work, checkout string, out *os.File) (run.Source, error) {
 	if t.SourceCommit == "" || r.SourceRepos == "" {
@@ -128,5 +128,6 @@ func (r *Runner) execute(ctx context.Context, t state.Task, script string, out *
 		Keep:        keep,
 		Fence:       r.fence(t),
 		Source:      source,
+		Forgefile:   t.Forgefile,
 	}, out)
 }

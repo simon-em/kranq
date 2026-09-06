@@ -24,7 +24,7 @@ rather than hanging.
 ```sh
 go build -o /tmp/forge .
 /tmp/forge image build                                   # base only, ~2.5 min
-/tmp/forge image build --repo dx --ref ci/lima           # + project layer, ~5 min
+/tmp/forge image build --repo dx --ref ci/lima           # + every layer, ~5 min
 /tmp/forge run smoke.yaml --repo dx --branch ci/lima --artifacts ./out
 ```
 
@@ -39,7 +39,7 @@ steps:
   - name: prove the checkout is real
     run: |
       echo "branch: $(git rev-parse --abbrev-ref HEAD)"
-      test -f ci/setup.yaml && echo "ci/setup.yaml is present"
+      test -f Forgefile && echo "the Forgefile is present"
   - name: prove the toolchain came from the image
     run: |
       docker run --rm hello-world 2>&1 | grep -q "Hello from Docker" && echo "docker runs containers"
@@ -65,7 +65,7 @@ Lima's own progress output is noisy. To read only forge's:
 /tmp/forge image prune          # keeps the newest 3 per layer, never touches Running
 ```
 
-Images are large: a base is ~2.6 GB and a dx project layer ~5.5 GB. They are the cache, so
+Images are large: a base is ~2.6 GB and dx's layers ~5.5 GB in total. They are the cache, so
 deleting them costs the build time above, not correctness.
 
 ## Known cosmetic issue

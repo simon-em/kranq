@@ -47,6 +47,7 @@ type Spec struct {
 	Repo      string            `yaml:"repo"`
 	Branch    string            `yaml:"branch"`
 	Label     string            `yaml:"label"`
+	Forgefile string            `yaml:"forgefile"`
 	Artifacts string            `yaml:"artifacts"`
 	Resources Resources         `yaml:"resources"`
 	Env       map[string]string `yaml:"env"`

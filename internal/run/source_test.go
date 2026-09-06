@@ -32,10 +32,7 @@ func pushedRepo(t *testing.T) (bare, commit string) {
 	gitIn(t, root, "init", "--bare", "--quiet", bare)
 	work := filepath.Join(root, "work")
 	gitIn(t, root, "init", "--quiet", work)
-	if err := os.MkdirAll(filepath.Join(work, "ci"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(work, "ci", "setup.yaml"), []byte("memory: 2GiB\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(work, "Forgefile"), []byte("RUN true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(work, "MESSAGE"), []byte("only in the push\n"), 0o644); err != nil {
@@ -112,7 +109,7 @@ func TestCheckoutPushedNeedsNoNetwork(t *testing.T) {
 	if err := CheckoutPushed(context.Background(), bare, branch, dest, nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(filepath.Join(dest, "ci", "setup.yaml")); err != nil {
+	if _, err := os.Stat(filepath.Join(dest, "Forgefile")); err != nil {
 		t.Fatalf("the host cannot read the project config: %v", err)
 	}
 }

@@ -23,6 +23,7 @@ var knownSettings = map[string]string{
 	"FORGE_NODE":               "what this machine calls itself in a fence record",
 	"FORGE_AUTO_CREATE_REPOS":  "make a repository on first push (default true)",
 	"FORGE_AUTO_INSTALL_DEPS":  "fetch lima on first use (default true)",
+	"FORGE_KEEP_IMAGES":        "how many recently used layer chains to keep when pruning",
 	"CLAUDE_CODE_OAUTH_TOKEN":  "set it with `forge auth claude` instead",
 }
 

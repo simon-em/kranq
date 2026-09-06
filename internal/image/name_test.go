@@ -38,39 +38,109 @@ func TestBaseNameRollsOverWithTheTTLBucket(t *testing.T) {
 	}
 }
 
-func projectWith(setup string, keys ...project.KeyFile) project.Project {
-	return project.Project{SetupRaw: []byte(setup), Basekey: keys}
+func layer(run string, files ...project.File) project.Resolved {
+	return project.Resolved{Layer: project.Layer{Run: run}, Files: files}
 }
 
-func TestProjectNameFoldsInTheBaseSetupAndEveryKeyFile(t *testing.T) {
-	base := "forge-base-abc-100"
-	p := projectWith("memory: 3GiB", project.KeyFile{Path: "Gemfile.lock", Contents: []byte("a")})
+func file(dest, digest string) project.File {
+	return project.File{Dest: dest, Digest: digest, Mode: 0o644}
+}
 
-	name := ProjectName("dx", base, p)
-	if !strings.HasPrefix(name, "forge-proj-dx-") {
-		t.Errorf("name = %q, want it to carry the repo", name)
+func TestALayerIsKeyedOnItsParentAndItsContent(t *testing.T) {
+	base := "forge-base-abc-100"
+	l := layer("bundle install", file("Gemfile.lock", "aaa"))
+	name := LayerName(base, l, 1)
+
+	if !strings.HasPrefix(name, LayerPrefix+"-01-") {
+		t.Errorf("name = %q, want the prefix and the depth", name)
+	}
+	if LayerName(base, l, 1) != name {
+		t.Error("LayerName is not deterministic")
 	}
 
+	env := project.Resolved{Layer: project.Layer{Run: "bundle install", Env: []project.EnvVar{{Name: "A", Value: "1"}}}, Files: l.Files}
+	workdir := project.Resolved{Layer: project.Layer{Run: "bundle install", Workdir: "/elsewhere"}, Files: l.Files}
 	for label, other := range map[string]struct {
-		base string
-		p    project.Project
+		parent string
+		l      project.Resolved
+		depth  int
 	}{
-		"a new base image":   {"forge-base-abc-101", p},
-		"a changed setup":    {base, projectWith("memory: 4GiB", p.Basekey...)},
-		"a changed lockfile": {base, projectWith("memory: 3GiB", project.KeyFile{Path: "Gemfile.lock", Contents: []byte("b")})},
-		"an added key file":  {base, projectWith("memory: 3GiB", p.Basekey[0], project.KeyFile{Path: ".nvmrc", Contents: []byte("v22")})},
-		"a renamed key file": {base, projectWith("memory: 3GiB", project.KeyFile{Path: "yarn.lock", Contents: []byte("a")})},
+		"a new base image":   {"forge-base-abc-101", l, 1},
+		"a changed command":  {base, layer("bundle install --jobs 4", l.Files...), 1},
+		"a changed lockfile": {base, layer("bundle install", file("Gemfile.lock", "bbb")), 1},
+		"a renamed file":     {base, layer("bundle install", file("yarn.lock", "aaa")), 1},
+		"an added file":      {base, layer("bundle install", l.Files[0], file(".nvmrc", "ccc")), 1},
+		"a changed mode":     {base, layer("bundle install", project.File{Dest: "Gemfile.lock", Digest: "aaa", Mode: 0o755}), 1},
+		"a changed env":      {base, env, 1},
+		"a changed workdir":  {base, workdir, 1},
 	} {
-		if ProjectName("dx", other.base, other.p) == name {
-			t.Errorf("%s must invalidate the project image", label)
+		if LayerName(other.parent, other.l, other.depth) == name {
+			t.Errorf("%s must invalidate the layer", label)
 		}
 	}
 }
 
-func TestProjectNameIsStableAcrossCalls(t *testing.T) {
-	p := projectWith("x", project.KeyFile{Path: "a", Contents: []byte("1")})
-	if ProjectName("dx", "b", p) != ProjectName("dx", "b", p) {
-		t.Error("ProjectName is not deterministic")
+// The whole point of content addressing: the same work under a different
+// repository is the same layer, built once and shared.
+func TestALayerDoesNotDependOnWhoBuiltIt(t *testing.T) {
+	base := "forge-base-abc-100"
+	l := layer("apt-get install -y default-jdk")
+	if LayerName(base, l, 1) != LayerName(base, l, 1) {
+		t.Fatal("LayerName is not deterministic")
+	}
+	if strings.Contains(LayerName(base, l, 1), "dx") {
+		t.Error("a layer name carries a repository, so two projects cannot share it")
+	}
+}
+
+func TestAChainInvalidatesOnlyTheTail(t *testing.T) {
+	base := "forge-base-abc-100"
+	layers := []project.Resolved{
+		layer("apt-get install -y default-jdk"),
+		layer("ruby-build 3.4.1 /opt/ci/ruby", file(".ruby-version", "aaa")),
+		layer("bundle install", file("Gemfile.lock", "bbb")),
+	}
+	before := Chain(base, "", layers)
+	if len(before) != 4 || before[0] != base {
+		t.Fatalf("chain = %v, want the base plus one name per layer", before)
+	}
+
+	layers[2] = layer("bundle install", file("Gemfile.lock", "changed"))
+	after := Chain(base, "", layers)
+	for i := 0; i < 3; i++ {
+		if before[i] != after[i] {
+			t.Errorf("layer %d changed, so a lockfile edit rebuilt work it did not touch", i)
+		}
+	}
+	if before[3] == after[3] {
+		t.Error("the edited layer was reused")
+	}
+}
+
+// Lima can grow a disk when cloning but never shrink one, so two projects
+// asking for different sizes must not land on the same layer.
+func TestADifferentDiskIsADifferentChain(t *testing.T) {
+	base := "forge-base-abc-100"
+	layers := []project.Resolved{layer("apt-get install -y default-jdk")}
+	if Chain(base, "", layers)[1] == Chain(base, "80GiB", layers)[1] {
+		t.Error("a bigger disk reused a chain built on a smaller one")
+	}
+	if Chain(base, "80GiB", layers)[1] != Chain(base, "80GiB", layers)[1] {
+		t.Error("Chain is not deterministic")
+	}
+	if Chain(base, "80GiB", layers)[0] != base {
+		t.Error("the first layer must still be cloned from the base itself")
+	}
+}
+
+func TestALayerNameFitsLimasSocketPath(t *testing.T) {
+	name := LayerName("forge-base-abcdef0123-4567", layer("x"), 99)
+	path := "/Users/averyverylongusername/.lima/" + name + "/ssh.sock.1234567890123456"
+	if len(path) >= 104 {
+		t.Errorf("lima would build a %d byte socket path from %q, and macOS caps it at 104", len(path), name)
+	}
+	if !Managed(name) || !IsLayer(name) {
+		t.Errorf("%q must be recognised as a forge layer", name)
 	}
 }
 

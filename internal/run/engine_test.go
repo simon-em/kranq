@@ -21,6 +21,7 @@ func engine(t *testing.T, f *vm.Fake) *Engine {
 		Images: &image.Manager{
 			Driver:   f,
 			Template: []byte("vmType: vz\n"),
+			MetaDir:  filepath.Join(t.TempDir(), "layers"),
 			Now:      func() time.Time { return time.Unix(1_780_000_000, 0) },
 		},
 	}
@@ -29,11 +30,8 @@ func engine(t *testing.T, f *vm.Fake) *Engine {
 func checkout(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, "ci"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	body := "memory: 3GiB\nsetup: |\n  echo provisioning\n"
-	if err := os.WriteFile(filepath.Join(dir, "ci", "setup.yaml"), []byte(body), 0o600); err != nil {
+	body := "MEMORY 3GiB\nCPUS 4\nRUN echo provisioning\n"
+	if err := os.WriteFile(filepath.Join(dir, "Forgefile"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return dir
@@ -176,7 +174,7 @@ func TestNoArtifactsWhenTheJobLeftNone(t *testing.T) {
 	}
 }
 
-func TestAMissingSetupFileFailsBeforeAnyVMIsCreated(t *testing.T) {
+func TestAMissingForgefileFailsBeforeAnyVMIsCreated(t *testing.T) {
 	f := vm.NewFake()
 	req := request(t)
 	req.Checkout = t.TempDir()
@@ -273,5 +271,54 @@ func TestParseKeepRejectsNonsense(t *testing.T) {
 	}
 	if _, ok := ParseKeep("sometimes"); ok {
 		t.Error("a typo must be rejected at the flag, not silently mean never")
+	}
+}
+
+// The Forgefile sizes the run VM, not the layers, so a layer shared with a project
+// that wants less memory is not the thing that decides how big this job gets.
+func TestTheRunVMIsSizedByTheBuildFile(t *testing.T) {
+	f := vm.NewFake()
+	res, err := engine(t, f).Execute(context.Background(), request(t), io.Discard)
+	if err != nil {
+		t.Fatal(err)
+	}
+	list, _ := f.List(context.Background())
+	for _, inst := range list {
+		if inst.Name == res.VMName && inst.CPUs != 4 {
+			t.Errorf("the job VM got %d cpus, want the 4 the Forgefile asked for", inst.CPUs)
+		}
+	}
+}
+
+func TestACustomBuildFileIsHonoured(t *testing.T) {
+	f := vm.NewFake()
+	req := request(t)
+	body := "RUN echo staging\n"
+	if err := os.WriteFile(filepath.Join(req.Checkout, "Forgefile.staging"), []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	req.Forgefile = "Forgefile.staging"
+
+	var scripts []string
+	f.ShellFunc = func(name, script string, out io.Writer) (int, error) {
+		scripts = append(scripts, script)
+		return 0, nil
+	}
+	if _, err := engine(t, f).Execute(context.Background(), req, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(scripts, "\n"), "echo staging") {
+		t.Error("the named build file was not the one that ran")
+	}
+}
+
+func TestAMissingBuildFileNamesIt(t *testing.T) {
+	req := request(t)
+	if err := os.Remove(filepath.Join(req.Checkout, "Forgefile")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := engine(t, vm.NewFake()).Execute(context.Background(), req, io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "Forgefile") {
+		t.Errorf("error = %v, want it to name the file the repository is missing", err)
 	}
 }

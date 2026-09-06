@@ -65,7 +65,7 @@ git host so nothing external is touched:
 
 | | |
 | --- | --- |
-| host claims before any image work | claimed, then the project layer built |
+| host claims before any image work | claimed, then the layers built |
 | a raw `git push` inside the VM | refused by the guard hook |
 | `forge_push` | fence advanced and branch created in one push |
 | clean finish | fence released, branch present |

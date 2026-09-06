@@ -39,6 +39,7 @@ id=$(forge run ci/tasks/spec.yaml --detach) && forge logs "$id" -f
 | `--remote` | `$FORGE_GIT_REMOTE` | git remote base, e.g. `git@bitbucket.org:effetmonstre` |
 | `--env NAME=V`, `-e` | | repeatable; bare `-e NAME` forwards it from here |
 | `--keep-vm` | `never` | `never`, `on-failure`, `always` |
+| `--forgefile FILE` | `Forgefile`, or the spec's `forgefile:` | build file to read from the repository root |
 | `--timeout` | `4h` | ceiling on the run |
 | `--detach` | off | print the task id and return |
 | `--local` | off | run in this process, bypassing the daemon |
@@ -88,10 +89,23 @@ Print a task's log; `-f` follows until it finishes.
 Cancel queued or running tasks. A running job is signalled as a **process
 group**, then SIGKILLed if it ignores SIGTERM, so its VM goes with it.
 
-### `forge validate <task.yaml>...` and `forge render <task.yaml>`
+### `forge validate <task.yaml|Forgefile>...` and `forge render <task.yaml>`
 
 Parse a spec, and print the bash script it compiles to. Neither needs a daemon.
 `render` is how you see what a task will actually run.
+
+Given a `Forgefile` it resolves every `COPY` and prints the layer each `RUN`
+produces, which is how you see what an edit would rebuild before paying for it:
+
+```
+$ forge validate Forgefile
+LINE  INSTRUCTION                        FILES  IMAGE
+4     RUN sudo apt-get update                0  forge-layer-01-97ab2ab29342
+8     RUN ruby-build "$(cat .ruby-versi...   1  forge-layer-03-0cf0d6d9e047
+11    RUN bundle install                     2  forge-layer-04-2b3a3377b10b
+```
+
+`COPY` paths are relative to the repository root, so run it from there.
 
 ---
 
@@ -125,13 +139,17 @@ Only useful with `--keep-vm`, which is how you get to look at a failed run.
 
 ```sh
 forge image ls
-forge image build --repo dx --ref main     # warm both layers ahead of time
+forge image build --repo dx --ref main                        # warm the whole chain
+forge image build --repo dx --ref main --forgefile Forgefile.perf
 forge image prune
 ```
 
-Two layers: a shared base, and a per-project layer keyed by the repo's
-`ci/setup.yaml`. A job clones the project layer, which is an APFS
-copy-on-write clone and effectively free.
+A shared base image, then one layer per `RUN` in the repository's `Forgefile`.
+Each layer is an APFS copy-on-write clone of the one before it, keyed by a hash
+of its parent, its command and the contents of the files it copies — so a
+lockfile edit rebuilds only the tail, and two repositories doing identical work
+share the layer. `forge image ls` shows which instruction each image came from
+and when it was last used. See [build.md](build.md).
 
 ---
 

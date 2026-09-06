@@ -34,6 +34,7 @@ type SubmitRequest struct {
 	Env          map[string]string
 	Keep         string
 	SourceCommit string
+	Forgefile    string
 }
 
 func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (state.Task, error) {
@@ -77,6 +78,7 @@ func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (st
 		MemoryBytes:  memory,
 		CPUs:         spec.Resources.CPUs,
 		SpecYAML:     string(req.SpecYAML),
+		Forgefile:    firstNonEmpty(req.Forgefile, spec.Forgefile),
 		Env:          req.Env,
 		Keep:         req.Keep,
 		SourceCommit: req.SourceCommit,

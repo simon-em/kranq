@@ -98,7 +98,9 @@ func (f *Fake) Clone(ctx context.Context, src, dst string, r Resources) error {
 	if f.instances[src].Status == "Running" {
 		return fmt.Errorf("clone: %s must be stopped to be cloned", src)
 	}
-	f.instances[dst] = &Instance{Name: dst, Status: "Stopped", CPUs: r.CPUs}
+	f.instances[dst] = &Instance{
+		Name: dst, Status: "Stopped", CPUs: r.CPUs, Memory: int64(r.MemoryGiB * (1 << 30)),
+	}
 	return nil
 }
 

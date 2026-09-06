@@ -125,20 +125,31 @@ Secrets are stored in a separate `secrets.json` in the task directory, so
 
 ## The project's own configuration
 
-Each repository supplies `ci/setup.yaml`, which builds its image layer:
+Each repository supplies a `Forgefile` at its root describing the environment its
+jobs run in. It reads like a Dockerfile, and each `RUN` is a layer:
 
-```yaml
-memory: 6GiB
-cpus: 4
-setup: |
-  # runs once, on a clone of the shared base image
-  # gets CI_REPO, CI_REF, CI_GIT_REMOTE
-  mise install
-  bundle install
+```
+MEMORY 6GiB
+CPUS 4
+
+COPY .ruby-version .
+RUN ruby-build "$(cat .ruby-version)" /opt/ci/ruby
+
+COPY Gemfile Gemfile.lock .
+RUN bundle install
 ```
 
-Optionally `ci/basekey.txt` lists files whose contents are folded into the image
-key, so changing a lockfile rebuilds the layer and changing nothing reuses it.
+Editing `Gemfile.lock` rebuilds `bundle install` and nothing before it. A layer's
+identity is its parent plus its command plus the contents of the files it copies,
+and carries no repository name, so two projects doing identical work share the
+layer. Full detail in [build.md](build.md).
+
+A task can name a different Forgefile, and `--forgefile` overrides that:
+
+```yaml
+name: perf
+forgefile: Forgefile.perf
+```
 
 ## Artifacts
 

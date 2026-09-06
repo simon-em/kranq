@@ -114,8 +114,8 @@ main.go                  os.Exit(cli.Main(os.Args))
 assets/                  lima.yaml + mcp/*.py, go:embed'd into the binary
 internal/cli/            subcommand dispatch, flag parsing, terminal output
 internal/task/           task schema + compiling a spec to one bash script (ported verbatim)
-internal/project/        ci/setup.yaml and ci/basekey.txt parsing
-internal/image/          content-addressed naming, the two-layer cache, build, prune
+internal/project/        the Forgefile: parsing it, and resolving what COPY selects
+internal/image/          content-addressed layers, the chain cache, build, prune
 internal/vm/             the limactl Driver interface, the Lima impl, and a Fake for tests
 internal/run/            one job end to end
 internal/sshagent/       the ensure_agent port
@@ -210,3 +210,60 @@ would otherwise both fetch it.
 **`limaAsset` is keyed by architecture and every entry is a macOS build.** Guard
 on `GOOS` before installing, or the linux client downloads a Darwin tarball and
 reports success. `deps.Supported()` is that guard.
+
+**A layer is not usable just because `limactl` knows about it.** The instance directory
+appears the moment a clone starts, so `Driver.Exists` is true for a layer whose build is
+still running, or one a crash left half-built. `image.complete` requires the metadata
+record too, and that record is written only after the build succeeds. Without it a second
+job clones a Running parent and Lima refuses: *"must be stopped to be cloned"*.
+
+**Layer builds are serialised by a `flock`, not a mutex.** Jobs run in separate
+`forge exec` processes, so an in-process lock does not see them. The lock files live in
+`$FORGE_HOME/layers` beside the metadata; they are never deleted, because removing one a
+process still holds would let a third process create a fresh file and proceed in parallel.
+
+**A layer name deliberately carries no repository.** That is what lets two projects share
+one build. `image.LayerName` hashes the parent, the workdir, the env, the command and the
+digest of every copied file — and nothing else. Adding a repo or a branch to it would
+silently turn the cache back into a per-project one.
+
+**`copy:` skips `.git`.** Two clones of the same commit have different packfiles, so a
+copied `.git` would give every machine a different layer for identical source.
+
+**File modes are normalised to 0755/0644 before hashing.** The executable bit is the only
+permission git records; hashing the raw mode makes a layer depend on the builder's umask.
+
+**A Forgefile refuses Dockerfile instructions by name, not as "unknown".** Someone will
+paste a Dockerfile in, and what they pasted it for is usually `FROM`, `CMD` or `ADD`. Each
+refusal says what forge does instead. `ADD` is refused rather than aliased to `COPY`: it
+unpacks archives and fetches URLs, so a layer's contents would depend on a server.
+
+**`RUN` is the only layer boundary; `COPY`/`ENV`/`WORKDIR` stage into the next one.** A
+layer here costs a VM boot, not a filesystem commit, because an image must be stopped to be
+cloned. Docker's per-instruction layering would spend thirty seconds materialising a
+two-line COPY. Cache behaviour is unchanged, because the copied files are in the layer's
+hash either way.
+
+**Anything staged after the last `RUN` still becomes a layer.** Otherwise a trailing `COPY`
+would be silently dropped from the image.
+
+**Layers are diffs on disk already, via APFS not an overlay.** Measured: cloning the 2.9GB
+base costs 0.10s and zero bytes; a base plus two layers that `du` totals at 8.7GB really
+costs 251MiB over the base. `du` counts shared blocks against both parent and child, so the
+honest measure is the change in free space.
+
+**Never `cp -a src/. dest` to install files into a layer.** `cp -a` applies the *source
+directory's* ownership and mode to the destination, so `sudo cp -a /tmp/forge-stage/. /`
+turns `/` from `root:root 755` into the build user's. Measured, not theorised: the image
+still boots to a login prompt, `limactl list` says Running, and sshd never answers again —
+which reads exactly like a Lima flake. `image.installScript` uses
+`tar --no-overwrite-dir` instead, which leaves existing directories' metadata alone while
+still creating new ones. A unit test pins the shape, because nothing below a real VM can
+see the failure.
+
+**`memory`/`cpus` size a layer build; `disk` is part of the chain's identity.** Building
+at the base's 1GiB cannot run a `bundle install`, so the project's size is applied to layer
+clones too — but not hashed, because the job's own clone asks for them again. Disk cannot
+be applied that way: lima grows a disk on clone and never shrinks one, so a project asking
+for less than a shared layer already has would be refused. `image.Root` folds it into the
+first layer's key instead.

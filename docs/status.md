@@ -9,7 +9,7 @@ identical, 529 lines.
 
 **Phase 1, one real job.** `forge run --local` checks out the repo, builds or
 reuses both image layers, clones a VM, runs the task, pulls artifacts, destroys
-the VM. Base image 153s, dx's project layer 289s, a job against the warm image
+the VM. Base image 153s, dx's layers 289s, a job against the warm image
 17s.
 
 **Phase 2, the daemon.** `internal/state`, `svc.Prepare`, `sched`, `gate`, `ipc`,

@@ -281,10 +281,7 @@ func TestTheRepoIsCreatedOnFirstPush(t *testing.T) {
 // even though the history behind it is not.
 func TestThePushedTreeIsCompleteAndClonable(t *testing.T) {
 	h := newHarness(t)
-	if err := os.MkdirAll(filepath.Join(h.shallow, "ci"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(h.shallow, "ci", "setup.yaml"), []byte("memory: 2GiB\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(h.shallow, "Forgefile"), []byte("RUN true\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	mustGit(t, h.shallow, "add", "-A")
@@ -300,11 +297,11 @@ func TestThePushedTreeIsCompleteAndClonable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("a VM could not clone the pushed source: %v\n%s", err, out)
 	}
-	body, err := os.ReadFile(filepath.Join(dest, "ci", "setup.yaml"))
+	body, err := os.ReadFile(filepath.Join(dest, "Forgefile"))
 	if err != nil {
 		t.Fatalf("the tree is incomplete: %v", err)
 	}
-	if !strings.Contains(string(body), "2GiB") {
+	if !strings.Contains(string(body), "RUN true") {
 		t.Fatalf("wrong content: %q", body)
 	}
 }

@@ -14,8 +14,8 @@ import (
 	"github.com/effetmonstre/forge/assets"
 	"github.com/effetmonstre/forge/internal/exitcode"
 	"github.com/effetmonstre/forge/internal/fence"
-	"github.com/effetmonstre/forge/internal/image"
 	"github.com/effetmonstre/forge/internal/ipc"
+	"github.com/effetmonstre/forge/internal/project"
 	"github.com/effetmonstre/forge/internal/run"
 	"github.com/effetmonstre/forge/internal/sshagent"
 	"github.com/effetmonstre/forge/internal/state"
@@ -52,6 +52,7 @@ func runRun(env Env, args []string) int {
 	local := fs.Bool("local", false, "run in this process instead of submitting to the daemon")
 	detach := fs.Bool("detach", false, "print the task id and exit without following")
 	keep := fs.String("keep-vm", "never", "keep the job VM: never, on-failure, always")
+	forgefile := fs.String("forgefile", "", "build file to read, relative to the repository root (default: "+project.DefaultFile+")")
 	timeout := fs.Duration("timeout", 4*time.Hour, "ceiling on the run")
 	forward := envFlag{}
 	fs.Var(forward, "env", "NAME=VALUE, or bare NAME to forward it from this environment")
@@ -100,6 +101,7 @@ func runRun(env Env, args []string) int {
 		return submitAndFollow(env, submission{
 			spec: string(specRaw), repo: *repo, branch: *branch, label: *label,
 			env: forward, artifacts: *artifacts, detach: *detach, keep: *keep,
+			forgefile: *forgefile,
 		})
 	}
 
@@ -142,7 +144,7 @@ func runRun(env Env, args []string) int {
 	driver := vm.Lima{Bin: limaBin, Home: daemonCfg.LimaHome}
 	engine := &run.Engine{
 		Driver: driver,
-		Images: &image.Manager{Driver: driver, Template: assets.LimaTemplate},
+		Images: newImageManager(driver),
 		Assets: assets.MCP(),
 	}
 	res, err := engine.Execute(ctx, run.Request{
@@ -157,6 +159,7 @@ func runRun(env Env, args []string) int {
 		RemoteBase:  *remote,
 		Keep:        keepPolicy,
 		Fence:       localFence(spec, *branch, *repo),
+		Forgefile:   firstNonEmpty(*forgefile, spec.Forgefile),
 	}, env.Stderr)
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
@@ -178,6 +181,15 @@ func localFence(spec task.Spec, branch, repo string) *run.FencePlan {
 		Node:  nodeName(),
 		Scope: fence.Scope{Kind: spec.FenceKind(), Repo: repo, Branch: spec.FenceBranch(branch)},
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 func envOr(names ...string) string {
@@ -223,6 +235,7 @@ type submission struct {
 	artifacts string
 	detach    bool
 	keep      string
+	forgefile string
 }
 
 func submitAndFollow(env Env, s submission) int {
@@ -232,7 +245,8 @@ func submitAndFollow(env Env, s submission) int {
 	}
 	ctx := context.Background()
 	t, err := client.Submit(ctx, ipc.SubmitRequest{
-		Spec: s.spec, Repo: s.repo, Branch: s.branch, Label: s.label, Env: s.env, Keep: s.keep,
+		Spec: s.spec, Repo: s.repo, Branch: s.branch, Label: s.label, Env: s.env,
+		Keep: s.keep, Forgefile: s.forgefile,
 	})
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)

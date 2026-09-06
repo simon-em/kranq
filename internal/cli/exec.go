@@ -11,7 +11,6 @@ import (
 	"github.com/effetmonstre/forge/assets"
 	"github.com/effetmonstre/forge/internal/daemon"
 	"github.com/effetmonstre/forge/internal/exitcode"
-	"github.com/effetmonstre/forge/internal/image"
 	"github.com/effetmonstre/forge/internal/jobproc"
 	"github.com/effetmonstre/forge/internal/run"
 	"github.com/effetmonstre/forge/internal/state"
@@ -67,7 +66,7 @@ func runExec(env Env, args []string) int {
 	runner := &daemon.Runner{
 		Engine: &run.Engine{
 			Driver: driver,
-			Images: &image.Manager{Driver: driver, Template: assets.LimaTemplate},
+			Images: newImageManager(driver),
 			Assets: assets.MCP(),
 		},
 		RemoteBase:   cfg.GitRemote,

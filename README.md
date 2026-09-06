@@ -15,6 +15,7 @@ forge doctor                                     # is this machine able to run j
 ```
 
 **[Every command](docs/commands.md)** · [Writing a task](docs/tasks.md) ·
+[The Forgefile](docs/build.md) ·
 [Pushing work to forge](docs/push.md) · [Wiring it into a pipeline](docs/pipelines.md) ·
 [At-most-once effects](docs/fence.md) · [Operating it](docs/operations.md) ·
 [Installing with Homebrew](docs/homebrew.md) ·
@@ -32,7 +33,27 @@ and two jobs cannot see each other. Cloning is nearly free: `limactl clone` is a
 APFS copy-on-write clone.
 
 Measured on a 16 GiB M-series Mac: the shared base image builds in 153s, dx's
-project layer in 289s, and a job against a warm image runs in about 20s.
+layers in 289s, and a job against a warm image runs in about 20s.
+
+## The environment is a Forgefile
+
+A repository's `Forgefile` reads like a Dockerfile, and each `RUN` is a layer:
+
+```
+RUN sudo apt-get install -y --no-install-recommends default-jdk libvips
+
+COPY Gemfile Gemfile.lock .
+RUN bundle install
+```
+
+A layer is named by a hash of its parent, its command and the **contents** of the
+files it copies — and by nothing else. No repository, no branch. So editing a
+lockfile rebuilds the tail and nothing before it, and two projects installing the
+same packages share that layer rather than each building it.
+
+Layers are diffs, not copies: `limactl clone` is an APFS copy-on-write clone, so
+a layer is charged only for the blocks it writes. Measured on the 2.9 GB base,
+cloning it costs 0.10s and zero bytes. See [build.md](docs/build.md).
 
 ## Two ways to get work to it
 
@@ -118,8 +139,8 @@ internal/daemon/     the daemon, the job supervisor, the git endpoint
 internal/jobproc/    the handover between a job process and the daemon
 internal/ipc/        http over a unix socket
 internal/run/        one job end to end, including the pushed-source path
-internal/project/    ci/setup.yaml and ci/basekey.txt
-internal/image/      content-addressed naming, the two-layer cache, build, prune
+internal/project/    the Forgefile: parsing it, and resolving what COPY selects
+internal/image/      content-addressed layers, the chain cache, build, prune
 internal/vm/         the limactl driver, behind an interface with a fake
 internal/gitsrv/     receiving a git push over http and over ssh
 internal/authkeys/   forced-command entries in ~/.ssh/authorized_keys

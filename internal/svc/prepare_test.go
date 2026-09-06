@@ -136,3 +136,21 @@ func codeOf(err error) any {
 	}
 	return nil
 }
+
+func TestTheSpecCanNameItsBuildFileAndTheRequestOverridesIt(t *testing.T) {
+	spec := []byte("name: spec\nrepo: dx\nbranch: main\nforgefile: Forgefile.staging\nsteps:\n  - run: true\n")
+	t1, err := Prepare(SubmitRequest{SpecYAML: spec}, Capabilities{}, time.Now(), "id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if t1.Forgefile != "Forgefile.staging" {
+		t.Errorf("setup file = %q, want the one the spec named", t1.Forgefile)
+	}
+	t2, err := Prepare(SubmitRequest{SpecYAML: spec, Forgefile: "Forgefile.perf"}, Capabilities{}, time.Now(), "id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if t2.Forgefile != "Forgefile.perf" {
+		t.Errorf("setup file = %q, want the request to win over the spec", t2.Forgefile)
+	}
+}

@@ -9,12 +9,13 @@ import (
 )
 
 type SubmitRequest struct {
-	Spec   string            `json:"spec"`
-	Repo   string            `json:"repo,omitempty"`
-	Branch string            `json:"branch,omitempty"`
-	Label  string            `json:"label,omitempty"`
-	Env    map[string]string `json:"env,omitempty"`
-	Keep   string            `json:"keep,omitempty"`
+	Spec      string            `json:"spec"`
+	Repo      string            `json:"repo,omitempty"`
+	Branch    string            `json:"branch,omitempty"`
+	Label     string            `json:"label,omitempty"`
+	Env       map[string]string `json:"env,omitempty"`
+	Keep      string            `json:"keep,omitempty"`
+	Forgefile string            `json:"forgefile,omitempty"`
 	// Set when the source arrived by git push rather than being cloned from
 	// the git host. The commit is the exact object to build, not a branch tip
 	// that can move while the task waits in the queue.

@@ -47,6 +47,17 @@ tells you the upgrade failed, not that nothing happened.
 `forge rollback` keeps the binary it rolled away from, so running it twice
 returns you to where you started.
 
+### Upgrading onto layered images
+
+The first job after this upgrade rebuilds the base image and every layer, once
+per machine. A layer counts as usable only when `$FORGE_HOME/layers` has a record
+saying its build finished, and images built before that existed have no record.
+Adopting them instead would mean trusting an image forge cannot prove is
+complete, which is the failure the record exists to prevent.
+
+The `forge-proj-*` images from the single-layer scheme are dead on arrival —
+nothing can clone them any more. `forge image prune` sweeps them.
+
 ## Build machines
 
 ```sh
@@ -75,6 +86,7 @@ $FORGE_HOME/env          secrets, 0600, never in the launchd plist
 $FORGE_HOME/peers.json   the peer registry, 0600
 $FORGE_HOME/deps/        forge's own lima, never on the global PATH
 $FORGE_HOME/fence/       scratch git repos used to read and write fences
+$FORGE_HOME/layers/      one record per built image, and the build locks
 $FORGE_HOME/tasks/       one directory per task: task.json, log, artifacts
 $FORGE_HOME/forge.sock   the daemon socket, 0600 inside a 0700 directory
 ```

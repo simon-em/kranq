@@ -59,7 +59,7 @@ func Stage(ctx context.Context, src Source, taskID, dest string, git gitRunner) 
 	return branch, nil
 }
 
-// CheckoutPushed produces the working tree the host needs to read ci/setup.yaml,
+// CheckoutPushed produces the working tree the host needs to read the Forgefile,
 // without contacting the git host at all.
 func CheckoutPushed(ctx context.Context, bare, branch, dest string, git gitRunner) error {
 	if git == nil {

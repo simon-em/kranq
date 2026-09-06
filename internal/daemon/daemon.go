@@ -148,6 +148,7 @@ func (d *Daemon) Submit(req ipc.SubmitRequest) (state.Task, error) {
 		Label:        req.Label,
 		Env:          req.Env,
 		Keep:         req.Keep,
+		Forgefile:    req.Forgefile,
 		SourceCommit: req.SourceCommit,
 	}, svc.Capabilities{
 		HasClaudeToken: d.gate.Present(),

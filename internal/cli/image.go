@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -18,10 +19,22 @@ import (
 	"github.com/effetmonstre/forge/internal/vm"
 )
 
+func layerDir(home string) string { return filepath.Join(home, "layers") }
+
+func newImageManager(driver vm.Driver) *image.Manager {
+	cfg := daemonConfig()
+	return &image.Manager{
+		Driver:   driver,
+		Template: assets.LimaTemplate,
+		Keep:     settingInt(settings(cfg.Home), "FORGE_KEEP_IMAGES", 3),
+		MetaDir:  layerDir(cfg.Home),
+	}
+}
+
 func newManager() (*image.Manager, vm.Driver) {
 	cfg := daemonConfig()
 	driver := vm.Lima{Bin: limactlPath(cfg.Home), Home: cfg.LimaHome}
-	return &image.Manager{Driver: driver, Template: assets.LimaTemplate}, driver
+	return newImageManager(driver), driver
 }
 
 // For the commands that actually drive a VM, as opposed to listing what is
@@ -33,7 +46,7 @@ func newManagerWithLima(env Env) (*image.Manager, vm.Driver, error) {
 		return nil, nil, err
 	}
 	driver := vm.Lima{Bin: bin, Home: cfg.LimaHome}
-	return &image.Manager{Driver: driver, Template: assets.LimaTemplate}, driver, nil
+	return newImageManager(driver), driver, nil
 }
 
 func runImage(env Env, args []string) int {
@@ -55,19 +68,26 @@ func runImage(env Env, args []string) int {
 }
 
 func imageList(env Env, args []string) int {
-	_, driver := newManager()
+	m, driver := newManager()
 	instances, err := driver.List(context.Background())
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
 		return exitcode.MissingDep
 	}
 	w := tabwriter.NewWriter(env.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tSTATUS\tCPUS\tMEMORY")
+	fmt.Fprintln(w, "NAME\tSTATUS\tCPUS\tMEMORY\tLAYER\tLAST USED")
 	for _, i := range instances {
 		if !image.Managed(i.Name) {
 			continue
 		}
-		fmt.Fprintf(w, "%s\t%s\t%d\t%.1fGiB\n", i.Name, i.Status, i.CPUs, float64(i.Memory)/(1<<30))
+		meta, known := m.Describe(i.Name)
+		step, used := "-", "-"
+		if known {
+			step = meta.Step
+			used = meta.LastUsedAt.Local().Format("2006-01-02 15:04")
+		}
+		fmt.Fprintf(w, "%s\t%s\t%d\t%.1fGiB\t%s\t%s\n",
+			i.Name, i.Status, i.CPUs, float64(i.Memory)/(1<<30), step, used)
 	}
 	return flushed(w)
 }
@@ -76,7 +96,8 @@ func imageBuild(env Env, args []string) int {
 	fs := flag.NewFlagSet("image build", flag.ContinueOnError)
 	fs.SetOutput(env.Stderr)
 	repo := fs.String("repo", "", "repository slug; omit to build only the base image")
-	ref := fs.String("ref", "main", "ref to read ci/setup.yaml from")
+	ref := fs.String("ref", "main", "ref to read the build file from")
+	forgefile := fs.String("forgefile", "", "build file to read, relative to the repository root (default: "+project.DefaultFile+")")
 	remote := fs.String("remote", envOr("FORGE_GIT_REMOTE"), "git remote base")
 	if _, err := parsePermuted(fs, args); err != nil {
 		return exitcode.Usage
@@ -118,17 +139,17 @@ func imageBuild(env Env, args []string) int {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
 		return exitcode.CouldNotStart
 	}
-	proj, err := project.Load(checkout)
+	proj, err := project.Load(checkout, *forgefile)
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
 		return exitcode.InvalidSpec
 	}
-	plan, err := m.Ensure(ctx, *repo, *ref, proj, env.Stderr)
+	plan, err := m.Ensure(ctx, *repo, proj, env.Stderr)
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
 		return exitcode.CouldNotStart
 	}
-	fmt.Fprintln(env.Stdout, plan.Project)
+	fmt.Fprintln(env.Stdout, plan.Image())
 	return exitcode.OK
 }
 
