@@ -111,6 +111,7 @@ actually matters in production.
 
 ```
 main.go                  os.Exit(cli.Main(os.Args))
+Formula/forge.rb         the homebrew formula; this repository is its own tap
 assets/                  lima.yaml + mcp/*.py, go:embed'd into the binary
 internal/cli/            subcommand dispatch, flag parsing, terminal output
 internal/task/           task schema + compiling a spec to one bash script (ported verbatim)
@@ -267,3 +268,22 @@ clones too — but not hashed, because the job's own clone asks for them again. 
 be applied that way: lima grows a disk on clone and never shrinks one, so a project asking
 for less than a shared layer already has would be refused. `image.Root` folds it into the
 first layer's key instead.
+
+**This repository is its own homebrew tap.** The formula lives in `Formula/`, which is one
+of the three places brew looks (`Formula/`, `HomebrewFormula/`, the root), so there is no
+separate `homebrew-forge` repository. The tap url must be given explicitly —
+`brew tap simontlbt/forge` alone resolves to `github.com/simontlbt/homebrew-forge`, which
+does not exist:
+
+```sh
+brew tap simontlbt/forge https://github.com/simontlbt/forge
+brew install simontlbt/forge/forge
+```
+
+**The formula on `main` points at the last tag, never at `main`.** So a release is: tag,
+push the tag, then commit the tarball's sha256. The checksum commit necessarily lands
+*after* the tag it describes, which looks wrong and is not.
+
+**`brew install` runs autoremove and will uninstall unrelated packages.** It took out
+`python@3.14` and `pycparser` the first time. `HOMEBREW_NO_INSTALL_CLEANUP=1` prevents it;
+check `brew missing` afterwards either way.

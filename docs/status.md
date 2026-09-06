@@ -76,9 +76,9 @@ parallel spec and playwright runs.
 
 ## Risks worth keeping in view
 
-**forge has no git remote.** It exists only on one laptop and is now larger than
-the system it replaces. `ci-runner` has the same problem *and* is what currently
-runs CI.
+**`ci-runner` has no git remote.** It exists only on one laptop, and it is what
+currently runs CI. forge itself is at
+[github.com/simontlbt/forge](https://github.com/simontlbt/forge).
 
 **`ci-runner` is still at `CI_MAX_VMS=2`** while forge is at 1. Three VMs at
 ~3GiB on a 16GiB machine is tight. forge only runs when asked, so nothing runs

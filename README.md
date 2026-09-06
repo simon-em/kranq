@@ -96,8 +96,8 @@ usage returns. Rotating the token opens the gate immediately.
 ## Install
 
 ```sh
-brew tap effetmonstre/tap git@bitbucket.org:effetmonstre/homebrew-tap.git
-brew install forge
+brew tap simontlbt/forge https://github.com/simontlbt/forge
+brew install simontlbt/forge/forge
 ```
 
 That is all of it: lima is fetched and verified the first time a command needs a

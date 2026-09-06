@@ -1,65 +1,54 @@
 # Installing with Homebrew
 
-`brew install` from a tap of your own. The formula **builds from source**, so
-nothing has to be hosted anywhere and a private repository works with the ssh
-key you already have.
-
 ```sh
-brew tap effetmonstre/tap git@bitbucket.org:effetmonstre/homebrew-tap.git
-brew install forge
+brew tap simontlbt/forge https://github.com/simontlbt/forge
+brew install simontlbt/forge/forge
 forge doctor
 ```
 
 That is the whole install. Lima is fetched and verified the first time a command
 actually needs a VM, so there is no second step to remember.
 
-## Setting up the tap, once
+The formula **builds from source**, so there is no binary to host or sign. It
+needs Go, which brew installs as a build dependency.
 
-A tap is a git repository named `homebrew-<something>` with a `Formula/`
-directory. It can live on Bitbucket; only the GitHub shorthand assumes GitHub,
-and passing the url explicitly works for any host.
+## The repository is its own tap
 
-```sh
-mkdir homebrew-tap && cd homebrew-tap && git init
-mkdir Formula
-cp path/to/forge/packaging/homebrew/forge.rb Formula/forge.rb
-git add -A && git commit -m "forge"
-git remote add origin git@bitbucket.org:effetmonstre/homebrew-tap.git
-git push -u origin main
-```
+There is no separate `homebrew-forge` repository to keep in step. Homebrew reads
+formulae from `Formula/`, `HomebrewFormula/` or a repository's root, and this
+one keeps its formula in [`Formula/forge.rb`](../Formula/forge.rb).
 
-Then, on any machine:
-
-```sh
-brew tap effetmonstre/tap git@bitbucket.org:effetmonstre/homebrew-tap.git
-brew install forge
-```
-
-An ssh url means a private tap and a private source repository both work with
-the key that is already set up. No token, nothing to host.
+The url has to be given explicitly. `brew tap simontlbt/forge` on its own would
+look for `github.com/simontlbt/homebrew-forge`, which is the naming convention
+the shorthand assumes; passing the url says where it really is.
 
 ## Cutting a release
 
+Tag it, push the tag, then point the formula at the tarball and push that:
+
 ```sh
-cd forge
-git tag -a v0.2.0 -m "v0.2.0"
+git tag -a v0.2.0 -m "forge 0.2.0"
 git push origin v0.2.0
-git rev-parse v0.2.0^{commit}      # NOT `git rev-parse v0.2.0`
+
+curl -sL -o /tmp/forge.tar.gz \
+    https://github.com/simontlbt/forge/archive/refs/tags/v0.2.0.tar.gz
+shasum -a 256 /tmp/forge.tar.gz
 ```
 
-Then in the tap, update three lines and push:
+Then two lines in `Formula/forge.rb`:
 
 ```ruby
-  url "…", using: :git, tag: "v0.2.0", revision: "<that commit>"
-  version "0.2.0"
+  url "https://github.com/simontlbt/forge/archive/refs/tags/v0.2.0.tar.gz"
+  sha256 "<that checksum>"
 ```
 
-> **`revision:` must be the commit the tag points at, not the tag object.**
-> For an annotated tag `git rev-parse v0.2.0` returns the *tag object*, and brew
-> refuses the download with `tag should be X but is actually Y`. Append
-> `^{commit}`. This is the one thing that will waste your afternoon.
+The formula on `main` always points at the **last tag**, never at `main` itself,
+so the checksum commit necessarily lands after the tag it describes. That is
+normal and not a mistake to fix.
 
-`brew install --HEAD forge` builds the branch tip instead, ignoring tags.
+`version` is inferred from the url, and the build injects it into the binary:
+`forge version` prints `0.2.0`, not `dev`. `brew install --HEAD simontlbt/forge/forge`
+builds the branch tip instead, ignoring tags.
 
 ## What brew owns and what forge owns
 
@@ -82,7 +71,7 @@ forge install --deps-only --with-daemon    # and a launchd job
 Or use brew's own service supervision instead of forge's launchd job:
 
 ```sh
-brew services start forge
+brew services start simontlbt/forge/forge
 ```
 
 Pick one, not both: two supervisors starting the same daemon means the second
@@ -111,7 +100,7 @@ forge installed itself, and `forge peer upgrade` uses them on a build machine.
 ## Uninstalling
 
 ```sh
-brew services stop forge        # if you used brew's supervision
+brew services stop simontlbt/forge/forge   # if you used brew's supervision
 brew uninstall forge
 rm -rf ~/.forge                 # state, lima, task history, images metadata
 ```
@@ -123,7 +112,7 @@ the one to use.
 
 | | how |
 | --- | --- |
-| your laptop, as a client | `brew install forge` |
+| your laptop, as a client | `brew install simontlbt/forge/forge` |
 | a build machine you can ssh to | `forge peer upgrade <name>` from your laptop |
 | a build machine, by hand | `forge install --with-daemon` |
 | a CI container | the download shim, see [pipelines.md](pipelines.md) |
