@@ -98,3 +98,42 @@ func commitInto(t *testing.T, dir string) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// A pipeline needs the name before it pushes, and the only name it has is the
+// one it chose for the ref.
+func TestRunNameIsTheLastSegmentOfThePushedRef(t *testing.T) {
+	cases := map[string]string{
+		"refs/kranq/push/20260906T180307-19242-4885": "20260906T180307-19242-4885",
+		"refs/heads/main": "main",
+		"refs/heads/":     "",
+		"nope":            "",
+	}
+	for ref, want := range cases {
+		if got := RunName(ref); got != want {
+			t.Errorf("RunName(%q) = %q, want %q", ref, got, want)
+		}
+	}
+}
+
+// The pass refs age out with everything else, or a busy machine accumulates one
+// per run forever.
+func TestPassRefsAreSweptToo(t *testing.T) {
+	now := time.Date(2026, 9, 6, 18, 0, 0, 0, time.UTC)
+	refs := []string{
+		PassedRefPrefix + "20260901T000000-old",
+		PassedRefPrefix + "20260906T175000-new",
+	}
+	got := Expired(refs, now, DefaultTTL)
+	if len(got) != 1 || got[0] != PassedRefPrefix+"20260901T000000-old" {
+		t.Errorf("expired = %v, want just the old one", got)
+	}
+	found := false
+	for _, k := range Kept {
+		if k == PassedRefPrefix {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("Sweep does not look at %s, so they would never be dropped", PassedRefPrefix)
+	}
+}

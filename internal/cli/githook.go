@@ -15,6 +15,7 @@ import (
 	"github.com/simon-em/kranq/internal/exitcode"
 	"github.com/simon-em/kranq/internal/gitsrv"
 	"github.com/simon-em/kranq/internal/ipc"
+	"github.com/simon-em/kranq/internal/state"
 	"github.com/simon-em/kranq/internal/task"
 )
 
@@ -219,6 +220,7 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 		say(env, "could not read the result: %v", err)
 		return exitcode.OK
 	}
+	publish(env, ref, final)
 	say(env, "task %s %s (exit %d)", task.ID, final.Status, final.ExitCode)
 	// A push cannot carry an exit code: post-receive runs after the ref has
 	// already been accepted, and nothing it returns reaches git's exit status.
@@ -299,6 +301,38 @@ func refused(env Env, reason string) int {
 
 func oneLine(v string) string {
 	return strings.Join(strings.Fields(v), " ")
+}
+
+// publish names the run's outcome under the ref the client pushed to, because
+// that is the only name it knows before the task exists. A pipeline made of
+// nothing but git commands reads the outcome by fetching:
+//
+//	git fetch kranq refs/kranq/passed/<run>   # 128 if the run failed
+//
+// which is the only way a push can be made to turn a step red. post-receive
+// runs after the ref has been accepted, so `git push` exits 0 whatever the task
+// did -- measured, with a task exiting 12.
+func publish(env Env, pushed string, final state.Task) {
+	run := gitsrv.RunName(pushed)
+	if run == "" {
+		return
+	}
+	dir := gitDir()
+	if final.ResultRef != "" {
+		if err := git(dir, "update-ref", gitsrv.ResultRefPrefix+run, final.ResultRef); err != nil {
+			say(env, "could not publish the result as %s: %v", run, err)
+		}
+	}
+	if final.Status != state.StatusSucceeded {
+		return
+	}
+	if err := git(dir, "update-ref", gitsrv.PassedRefPrefix+run, final.ResultRef+"^{commit}"); err != nil {
+		// Without a result commit there is nothing to point at but the source,
+		// which is still a fine marker: the ref existing is the whole signal.
+		if err := git(dir, "update-ref", gitsrv.PassedRefPrefix+run, "refs/kranq/src/"+final.ID); err != nil {
+			say(env, "could not publish the pass marker: %v", err)
+		}
+	}
 }
 
 func resultField(ref string) string {

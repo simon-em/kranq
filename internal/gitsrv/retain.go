@@ -16,9 +16,28 @@ const DefaultTTL = 2 * 24 * time.Hour
 
 // Kept are the refs a run leaves behind: the source it was given, and the
 // commit it produced.
-var Kept = []string{"refs/kranq/src/", ResultRefPrefix}
+var Kept = []string{"refs/kranq/src/", ResultRefPrefix, PassedRefPrefix}
 
-const ResultRefPrefix = "refs/kranq/result/"
+const (
+	ResultRefPrefix = "refs/kranq/result/"
+	// PassedRefPrefix exists only so a pipeline can be pure git. A push cannot
+	// carry an exit code -- post-receive runs after the ref is accepted -- so
+	// the outcome is published as the presence or absence of a ref, and
+	// `git fetch` of a missing ref exits 128.
+	PassedRefPrefix = "refs/kranq/passed/"
+)
+
+// RunName is the last segment of the ref a push landed on, which is what a
+// client knows in advance: it chose it. Both the result and the pass ref are
+// published under it as well as under the task id, because the task id is only
+// known afterwards and a pipeline needs the name before it pushes.
+func RunName(ref string) string {
+	i := strings.LastIndex(ref, "/")
+	if i < 0 || i == len(ref)-1 {
+		return ""
+	}
+	return ref[i+1:]
+}
 
 // Expired picks the refs to drop. Retention goes by task id, not by commit
 // date: the id records when the run happened, while a commit date is whatever
