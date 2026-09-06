@@ -173,8 +173,6 @@ func TestAMangledInlineSpecIsRefusedClearly(t *testing.T) {
 	}
 }
 
-
-
 // git refuses a push option containing a literal newline, so a task sent inline
 // has to spell its line breaks:
 //
