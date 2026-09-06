@@ -9,8 +9,8 @@
 class Kranq < Formula
   desc "Runs CI jobs in disposable Lima VMs on a macOS build machine"
   homepage "https://github.com/simon-em/kranq"
-  url "https://github.com/simon-em/kranq/archive/refs/tags/v0.1.0.tar.gz"
-  sha256 "a07c649ccbf111aa18a1fad068e9c265aa9c578b28906a6a9899129ab9095f00"
+  url "https://github.com/simon-em/kranq/archive/refs/tags/v0.2.0.tar.gz"
+  sha256 "232d8ad102a5b1efb13e2ba4b07c7b4aaeca8922704dcb3511f66aa3bc045a79"
   # No license line: the repository carries no LICENSE file, and naming one here
   # would assert something untrue. Add a LICENSE and then say so.
 
