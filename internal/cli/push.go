@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/effetmonstre/forge/internal/exitcode"
 	"github.com/effetmonstre/forge/internal/gitsrv"
@@ -82,10 +84,6 @@ func runPush(env Env, args []string) int {
 		options = append(options, "-o", "detach")
 	}
 
-	dest := *branch
-	if dest == "" {
-		dest = "forge-push"
-	}
 	args = []string{"push", "--force"}
 	// Asking for forge as the receive-pack is what lets an ordinary ssh key
 	// push: git runs forge on the far side itself, so nothing has to be set up
@@ -95,7 +93,7 @@ func runPush(env Env, args []string) int {
 	}
 	args = append(args, target)
 	args = append(args, options...)
-	args = append(args, *rev+":refs/heads/"+dest)
+	args = append(args, *rev+":"+pushRef())
 
 	cmd := exec.Command("git", args...)
 	cmd.Stdin = os.Stdin
@@ -123,6 +121,20 @@ func runPush(env Env, args []string) int {
 	}
 	fmt.Fprintln(env.Stderr, "forge: the push was accepted but no result came back; the run may still be going")
 	return exitcode.Unreachable
+}
+
+// A ref that has already been pushed makes git say "Everything up-to-date" and
+// run no hook at all, so pushing the same commit twice would do nothing. That is
+// not an edge case: retrying a failed pipeline step is the ordinary way to
+// re-run a job. The destination ref is therefore unique per push, which costs
+// nothing because the branch the run reports comes from -o branch, not from
+// where the objects landed.
+func pushRef() string {
+	var nonce [8]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return fmt.Sprintf("refs/forge/push/%d", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("refs/forge/push/%s-%x", time.Now().UTC().Format("20060102T150405"), nonce)
 }
 
 func refusalCode(output string) int {

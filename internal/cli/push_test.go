@@ -173,3 +173,30 @@ func TestOrElse(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// Pushing the same commit twice must run the task twice: retrying a failed
+// pipeline step is the ordinary way to re-run a job, and git runs no hook at
+// all for a ref that is already where it would put it.
+func TestEveryPushGoesToItsOwnRef(t *testing.T) {
+	first, second := pushRef(), pushRef()
+	if first == second {
+		t.Fatalf("two pushes share the ref %q, so the second would be a no-op", first)
+	}
+	for _, ref := range []string{first, second} {
+		if !strings.HasPrefix(ref, "refs/forge/push/") {
+			t.Errorf("ref = %q, want it outside refs/heads so it is not mistaken for a branch", ref)
+		}
+		if strings.Count(ref, "/") < 2 {
+			t.Errorf("ref = %q; git refuses a single-segment refname remotely", ref)
+		}
+	}
+}
+
+func TestABranchIsReportedEvenWhenTheRefIsANonce(t *testing.T) {
+	if got := branchFromRef("refs/heads/ci/lima"); got != "ci/lima" {
+		t.Errorf("branchFromRef = %q, want the branch", got)
+	}
+	if got := branchFromRef(pushRef()); got != "forge-push" {
+		t.Errorf("branchFromRef = %q, want a readable fallback, not a nonce", got)
+	}
+}

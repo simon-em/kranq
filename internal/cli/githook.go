@@ -84,6 +84,16 @@ func pushOptions() []string {
 	return out
 }
 
+// A client that names no branch usually pushed to one, so the ref is the best
+// guess. A push meant only to carry objects lands outside refs/heads, and its
+// ref is a nonce that would be a nonsense branch name.
+func branchFromRef(ref string) string {
+	if head, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
+		return head
+	}
+	return "forge-push"
+}
+
 // Everything printed here reaches the pushing terminal prefixed with "remote:".
 func say(env Env, format string, args ...any) {
 	fmt.Fprintf(env.Stderr, "forge: "+format+"\n", args...)
@@ -156,7 +166,7 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 
 	branch := req.Branch
 	if branch == "" {
-		branch = strings.TrimPrefix(ref, "refs/heads/")
+		branch = branchFromRef(ref)
 	}
 
 	client := ipc.NewClient(socket)
