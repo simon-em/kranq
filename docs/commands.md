@@ -7,7 +7,7 @@ Commands marked **internal** are run by git or by the daemon, never by hand.
 
 | | |
 | --- | --- |
-| [Running tasks](#running-tasks) | `run` `push` `ps` `logs` `cancel` `validate` `render` |
+| [Running tasks](#running-tasks) | `run` `push` `ps` `logs` `fetch` `cancel` `validate` `render` |
 | [Inspecting a machine](#inspecting-a-machine) | `status` `doctor` `vm` `image` |
 | [The daemon](#the-daemon) | `daemon` `config` `auth` |
 | [Receiving pushes](#receiving-pushes) | `repo` `token` `key` |
@@ -88,6 +88,18 @@ Print a task's log; `-f` follows until it finishes.
 
 Cancel queued or running tasks. A running job is signalled as a **process
 group**, then SIGKILLed if it ignores SIGTERM, so its VM goes with it.
+
+### `forge fetch <id> [--out DIR]`
+
+```sh
+forge fetch 20260906T030344-d3c16 --out ./report
+ssh macmini@buildhost forge fetch 20260906T030344-d3c16 | tar xzf - -C ./report
+```
+
+Without `--out` the tar.gz goes to stdout, which is how a pipeline gets
+artifacts back over ssh without installing anything but `tar`. A task that
+produced nothing exits 0 and writes nothing, because dx pulls a test report from
+a run that failed and that is not itself a failure.
 
 ### `forge validate <task.yaml|Forgefile>...` and `forge render <task.yaml>`
 

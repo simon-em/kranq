@@ -127,6 +127,42 @@ func asRemote(err error, target **ipc.RemoteError) bool {
 	return ok
 }
 
+// fetch is what brings artifacts back over ssh: `ssh machine forge fetch <id>`
+// streams the tar.gz, so a caller needs nothing installed but tar. With --out
+// it unpacks locally instead, which is what you want at a terminal.
+func runFetch(env Env, args []string) int {
+	fs := flag.NewFlagSet("fetch", flag.ContinueOnError)
+	fs.SetOutput(env.Stderr)
+	out := fs.String("out", "", "unpack into this directory instead of writing the archive to stdout")
+	positional, err := parsePermuted(fs, args)
+	if err != nil {
+		return exitcode.Usage
+	}
+	if len(positional) != 1 {
+		fmt.Fprintln(env.Stderr, "usage: forge fetch <id> [--out DIR]")
+		return exitcode.Usage
+	}
+	client, code := connect(env, false)
+	if client == nil {
+		return code
+	}
+	if *out != "" {
+		fetchArtifacts(client, positional[0], *out, env)
+		return exitcode.OK
+	}
+	// A task that produced nothing is not a failure: dx fetches a test report
+	// from a run that failed, and an empty stream is how the caller sees it.
+	ok, err := client.Artifacts(context.Background(), positional[0], env.Stdout)
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "forge: %v\n", err)
+		return codeOf(err, exitcode.Unreachable)
+	}
+	if !ok {
+		fmt.Fprintln(env.Stderr, "forge: this task produced no artifacts")
+	}
+	return exitcode.OK
+}
+
 func fetchArtifacts(client *ipc.Client, id, dest string, env Env) {
 	if dest == "" {
 		return
