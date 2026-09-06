@@ -57,6 +57,13 @@ func (r *Runner) source(ctx context.Context, t state.Task, work, checkout string
 	return run.Source{Bare: staged, Commit: t.SourceCommit, Branch: branch}, nil
 }
 
+func (r *Runner) sharedRepo(repo string) string {
+	if r.SourceRepos == "" {
+		return ""
+	}
+	return filepath.Join(r.SourceRepos, repo+".git")
+}
+
 func short(sha string) string {
 	if len(sha) > 12 {
 		return sha[:12]
@@ -76,6 +83,7 @@ func (r *Runner) Run(ctx context.Context, t state.Task, script string, out *os.F
 		Artifacts:  res.Artifacts,
 		FenceRef:   res.FenceRef,
 		FenceHeld:  res.FenceHeld,
+		ResultRef:  res.ResultRef,
 		FinishedAt: time.Now(),
 	}
 	if err != nil {
@@ -129,5 +137,6 @@ func (r *Runner) execute(ctx context.Context, t state.Task, script string, out *
 		Fence:       r.fence(t),
 		Source:      source,
 		Kranqfile:   t.Kranqfile,
+		ResultRepo:  r.sharedRepo(t.Repo),
 	}, out)
 }

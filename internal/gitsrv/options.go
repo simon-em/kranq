@@ -111,10 +111,11 @@ const ResultMarker = "KRANQ-RESULT"
 const StatusRefused = "refused"
 
 type Result struct {
-	ID       string
-	Status   string
-	ExitCode int
-	Found    bool
+	ID        string
+	Status    string
+	ExitCode  int
+	ResultRef string
+	Found     bool
 }
 
 func ParseResult(output string) Result {
@@ -137,6 +138,8 @@ func ParseResult(output string) Result {
 				res.ID = value
 			case "status":
 				res.Status = value
+			case "result":
+				res.ResultRef = value
 			case "exit":
 				if n, err := strconv.Atoi(value); err == nil {
 					res.ExitCode = n

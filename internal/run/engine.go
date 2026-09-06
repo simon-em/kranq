@@ -62,6 +62,8 @@ type Request struct {
 	Fence       *FencePlan
 	Source      Source
 	Kranqfile   string
+	// Where the run's own commit is recorded, so whoever pushed can fetch it.
+	ResultRepo string
 }
 
 type Result struct {
@@ -69,6 +71,7 @@ type Result struct {
 	VMName    string
 	Image     string
 	Artifacts bool
+	ResultRef string
 	Kept      bool
 	FenceRef  string
 	FenceHeld bool
@@ -144,6 +147,12 @@ func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res R
 	res.ExitCode = code
 	failed = false
 	res.Artifacts = e.collect(ctx, name, req, out)
+	// Only on the pushed path: an incremental bundle needs its base on the
+	// other side, and a clone from the git host leaves nothing there to build
+	// on.
+	if req.Source.Pushed() && req.ResultRepo != "" {
+		res.ResultRef = e.commitResult(ctx, name, req, out)
+	}
 	return res, nil
 }
 

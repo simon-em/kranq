@@ -44,6 +44,7 @@ type Task struct {
 	VMKept       bool              `json:"vm_kept,omitempty"`
 	Keep         string            `json:"keep,omitempty"`
 	SourceCommit string            `json:"source_commit,omitempty"`
+	ResultRef    string            `json:"result_ref,omitempty"`
 	FenceRef     string            `json:"fence_ref,omitempty"`
 	FenceHeld    bool              `json:"fence_held,omitempty"`
 	FenceKind    string            `json:"fence_kind,omitempty"`

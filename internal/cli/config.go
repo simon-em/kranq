@@ -23,6 +23,7 @@ var knownSettings = map[string]string{
 	"KRANQ_NODE":               "what this machine calls itself in a fence record",
 	"KRANQ_AUTO_CREATE_REPOS":  "make a repository on first push (default true)",
 	"KRANQ_AUTO_INSTALL_DEPS":  "fetch lima on first use (default true)",
+	"KRANQ_RESULT_TTL_DAYS":    "how long a run's commit stays fetchable (default 2)",
 	"KRANQ_KEEP_IMAGES":        "how many recently used layer chains to keep when pruning",
 	"CLAUDE_CODE_OAUTH_TOKEN":  "set it with `kranq auth claude` instead",
 }

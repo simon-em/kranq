@@ -179,6 +179,7 @@ func (d *Daemon) RecordResult(taskID string, res jobproc.Result) {
 		u.VMKept = res.Kept
 		u.FenceRef = res.FenceRef
 		u.FenceHeld = res.FenceHeld
+		u.ResultRef = res.ResultRef
 	})
 }
 

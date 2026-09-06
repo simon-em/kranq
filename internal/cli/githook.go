@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/simon-em/kranq/internal/exitcode"
 	"github.com/simon-em/kranq/internal/gitsrv"
@@ -202,6 +203,7 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 	}
 	say(env, "task %s queued from %s", task.ID, commit[:12])
 	release(env, ref, commit, task.ID)
+	sweep(env)
 
 	if req.Detach {
 		say(env, "detached; follow it with: kranq logs %s -f", task.ID)
@@ -221,8 +223,11 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 	// A push cannot carry an exit code: post-receive runs after the ref has
 	// already been accepted, and nothing it returns reaches git's exit status.
 	// This line is the contract instead, and `kranq push` exits on it.
-	fmt.Fprintf(env.Stderr, "%s id=%s status=%s exit=%d\n",
-		gitsrv.ResultMarker, final.ID, final.Status, final.ExitCode)
+	fmt.Fprintf(env.Stderr, "%s id=%s status=%s exit=%d%s\n",
+		gitsrv.ResultMarker, final.ID, final.Status, final.ExitCode, resultField(final.ResultRef))
+	if final.ResultRef != "" {
+		say(env, "what it produced is a commit: git fetch kranq %s", final.ResultRef)
+	}
 	return exitcode.OK
 }
 
@@ -246,6 +251,24 @@ func release(env Env, ref, commit, taskID string) {
 	}
 	if err := git(dir, "update-ref", "-d", ref, commit); err != nil {
 		say(env, "could not release %s: %v", ref, err)
+	}
+}
+
+// A push is the moment this repository is known to be in use, which makes it
+// the cheapest place to drop what has aged out. It never fails a run: a
+// retention sweep that cannot run is a disk problem, not this job's problem.
+func sweep(env Env) {
+	ttl := gitsrv.DefaultTTL
+	if days := settingInt(settings(kranqHome()), "KRANQ_RESULT_TTL_DAYS", 0); days > 0 {
+		ttl = time.Duration(days) * 24 * time.Hour
+	}
+	dropped, err := gitsrv.Sweep(context.Background(), gitDir(), time.Now(), ttl)
+	if err != nil {
+		say(env, "could not sweep old run refs: %v", err)
+		return
+	}
+	if len(dropped) > 0 {
+		say(env, "dropped %d run ref(s) older than %s", len(dropped), ttl)
 	}
 }
 
@@ -276,6 +299,13 @@ func refused(env Env, reason string) int {
 
 func oneLine(v string) string {
 	return strings.Join(strings.Fields(v), " ")
+}
+
+func resultField(ref string) string {
+	if ref == "" {
+		return ""
+	}
+	return " result=" + ref
 }
 
 func gitDir() string {

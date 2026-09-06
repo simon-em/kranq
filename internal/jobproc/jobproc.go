@@ -28,6 +28,7 @@ type Result struct {
 	Artifacts  bool      `json:"artifacts,omitempty"`
 	FenceRef   string    `json:"fence_ref,omitempty"`
 	FenceHeld  bool      `json:"fence_held,omitempty"`
+	ResultRef  string    `json:"result_ref,omitempty"`
 	FinishedAt time.Time `json:"finished_at"`
 }
 
