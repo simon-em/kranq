@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/effetmonstre/forge/internal/exitcode"
+	"github.com/effetmonstre/forge/internal/gitsrv"
 )
 
 func TestPushURL(t *testing.T) {
@@ -198,5 +199,22 @@ func TestABranchIsReportedEvenWhenTheRefIsANonce(t *testing.T) {
 	}
 	if got := branchFromRef(pushRef()); got != "forge-push" {
 		t.Errorf("branchFromRef = %q, want a readable fallback, not a nonce", got)
+	}
+}
+
+// A run that was refused never produced a task exit code, so its code is
+// forge's own and must not be folded into the generic failure that a task
+// reporting 65 would be.
+func TestARefusedRunKeepsItsOwnCode(t *testing.T) {
+	refused := gitsrv.ParseResult("remote: FORGE-RESULT id= status=refused exit=65 reason=no claude token\n")
+	if !refused.Found || refused.Status != gitsrv.StatusRefused || refused.ExitCode != 65 {
+		t.Fatalf("parsed %+v", refused)
+	}
+	if got := exitcode.FromTask(refused.ExitCode); got == refused.ExitCode {
+		t.Skip("the reserved range no longer overlaps; this test is guarding nothing")
+	}
+	ran := gitsrv.ParseResult("remote: FORGE-RESULT id=x status=failed exit=12\n")
+	if exitcode.FromTask(ran.ExitCode) != 12 {
+		t.Errorf("a task's own code must pass through, got %d", exitcode.FromTask(ran.ExitCode))
 	}
 }

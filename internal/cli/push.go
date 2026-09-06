@@ -72,6 +72,18 @@ func runPush(env Env, args []string) int {
 	}
 
 	options := []string{"-o", "task=" + positional[0]}
+	// The spec travels with the push rather than being read out of the commit,
+	// so a task that lives in a submodule, or one you have edited and not
+	// committed, still runs. A submodule is a gitlink: its files are not in the
+	// commit at all, and no path can reach them.
+	if spec, err := os.ReadFile(positional[0]); err == nil {
+		encoded, encErr := gitsrv.EncodeSpec(spec)
+		if encErr != nil {
+			fmt.Fprintf(env.Stderr, "forge: %v\n", encErr)
+			return exitcode.InternalError
+		}
+		options = append(options, "-o", "spec="+encoded)
+	}
 	for _, kv := range [][2]string{{"label", *label}, {"branch", *branch}, {"keep-vm", *keep}} {
 		if kv[1] != "" {
 			options = append(options, "-o", kv[0]+"="+kv[1])
@@ -109,6 +121,8 @@ func runPush(env Env, args []string) int {
 
 	result := gitsrv.ParseResult(captured.String())
 	switch {
+	case result.Found && result.Status == gitsrv.StatusRefused:
+		return result.ExitCode
 	case result.Found:
 		return exitcode.FromTask(result.ExitCode)
 	case runErr != nil:

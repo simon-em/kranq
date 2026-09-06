@@ -127,18 +127,35 @@ func hookValidate(env Env, req gitsrv.Request, parseErr error, updates []update)
 		if isDeletion(u.New) {
 			continue
 		}
-		spec, err := showFile(gitDir(), u.New, req.Task)
+		spec, err := specFor(req, u.New)
 		if err != nil {
 			say(env, "%v", err)
 			return exitcode.InvalidSpec
 		}
 		if _, err := task.Parse(spec); err != nil {
-			say(env, "%s: %v", req.Task, err)
+			say(env, "%s: %v", taskName(req), err)
 			return exitcode.InvalidSpec
 		}
 	}
-	say(env, "accepted, will run %s", req.Task)
+	say(env, "accepted, will run %s", taskName(req))
 	return exitcode.OK
+}
+
+// A spec sent inline wins over a path, because a caller only sends one when the
+// path could not have worked: a shared task in a submodule is a gitlink, so its
+// contents are not in the commit at all.
+func specFor(req gitsrv.Request, commit string) ([]byte, error) {
+	if len(req.Spec) > 0 {
+		return req.Spec, nil
+	}
+	return showFile(gitDir(), commit, req.Task)
+}
+
+func taskName(req gitsrv.Request) string {
+	if req.Task != "" {
+		return req.Task
+	}
+	return "the task sent with this push"
 }
 
 func isDeletion(sha string) bool {
@@ -157,11 +174,10 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 		return exitcode.OK
 	}
 
-	dir := gitDir()
-	spec, err := showFile(dir, commit, req.Task)
+	spec, err := specFor(req, commit)
 	if err != nil {
 		say(env, "%v", err)
-		return exitcode.InvalidSpec
+		return refused(env, "the spec could not be read")
 	}
 
 	branch := req.Branch
@@ -182,7 +198,7 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 	})
 	if err != nil {
 		say(env, "could not submit: %v", err)
-		return exitcode.Unreachable
+		return refused(env, err.Error())
 	}
 	say(env, "task %s queued from %s", task.ID, commit[:12])
 
@@ -207,6 +223,19 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 	fmt.Fprintf(env.Stderr, "%s id=%s status=%s exit=%d\n",
 		gitsrv.ResultMarker, final.ID, final.Status, final.ExitCode)
 	return exitcode.OK
+}
+
+// A run that never started still owes the client a verdict. Without one it
+// cannot tell "refused" from "still going", and reports the wrong thing after
+// waiting for a result that is never coming.
+func refused(env Env, reason string) int {
+	fmt.Fprintf(env.Stderr, "%s id= status=%s exit=%d reason=%s\n",
+		gitsrv.ResultMarker, gitsrv.StatusRefused, exitcode.InvalidSpec, oneLine(reason))
+	return exitcode.OK
+}
+
+func oneLine(v string) string {
+	return strings.Join(strings.Fields(v), " ")
 }
 
 func gitDir() string {

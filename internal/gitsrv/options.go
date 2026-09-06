@@ -1,7 +1,11 @@
 package gitsrv
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"fmt"
+	"io"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,7 +16,12 @@ import (
 // arbitrary strings, they do not end up in a proxy's request log, and the hook
 // receives them as GIT_PUSH_OPTION_<n>.
 type Request struct {
-	Task    string
+	Task string
+	// Spec carries the task itself, for a caller whose spec is not in the
+	// commit being pushed: a shared task in a submodule is a gitlink, so its
+	// contents are simply not there, and neither is an edit you have not
+	// committed yet.
+	Spec    []byte
 	Label   string
 	Branch  string
 	Keep    string
@@ -39,6 +48,12 @@ func ParseOptions(options []string) (Request, error) {
 			req.Env[key] = value
 		case name == "task":
 			req.Task = value
+		case name == "spec":
+			decoded, err := decodeSpec(value)
+			if err != nil {
+				return req, err
+			}
+			req.Spec = decoded
 		case name == "label":
 			req.Label = value
 		case name == "branch":
@@ -51,7 +66,7 @@ func ParseOptions(options []string) (Request, error) {
 			req.Unknown = append(req.Unknown, name)
 		}
 	}
-	if req.Task == "" {
+	if req.Task == "" && len(req.Spec) == 0 {
 		return req, fmt.Errorf("no task: push with -o task=<path to the spec inside the repo>")
 	}
 	if len(req.Unknown) > 0 {
@@ -83,6 +98,11 @@ func Redact(options []string) []string {
 // run did, because post-receive runs after the ref has already moved. The hook
 // prints this line instead and the client exits on it.
 const ResultMarker = "FORGE-RESULT"
+
+// StatusRefused marks a run that never started, so its code is forge's own and
+// passes through instead of being folded into a generic failure the way a
+// task's code in the reserved range is.
+const StatusRefused = "refused"
 
 type Result struct {
 	ID       string
@@ -119,4 +139,46 @@ func ParseResult(output string) Result {
 		}
 	}
 	return res
+}
+
+// MaxSpec is generous against any real task and far below the 64KiB a single
+// push option can carry, which is what the gzip buys.
+const MaxSpec = 1 << 20
+
+// EncodeSpec is the wire form of an inline task: gzipped, then base64, because
+// a push option reaches the hook as an environment variable and a spec is
+// YAML full of newlines.
+func EncodeSpec(spec []byte) (string, error) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err := gz.Write(spec); err != nil {
+		return "", err
+	}
+	if err := gz.Close(); err != nil {
+		return "", err
+	}
+	return base64.StdEncoding.EncodeToString(buf.Bytes()), nil
+}
+
+func decodeSpec(value string) ([]byte, error) {
+	packed, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return nil, fmt.Errorf("the inline spec is not base64: %w", err)
+	}
+	gz, err := gzip.NewReader(bytes.NewReader(packed))
+	if err != nil {
+		return nil, fmt.Errorf("the inline spec is not gzipped: %w", err)
+	}
+	defer gz.Close()
+	spec, err := io.ReadAll(io.LimitReader(gz, MaxSpec+1))
+	if err != nil {
+		return nil, fmt.Errorf("the inline spec could not be read: %w", err)
+	}
+	if len(spec) > MaxSpec {
+		return nil, fmt.Errorf("the inline spec is larger than %d bytes", MaxSpec)
+	}
+	if len(spec) == 0 {
+		return nil, fmt.Errorf("the inline spec is empty")
+	}
+	return spec, nil
 }

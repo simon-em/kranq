@@ -128,3 +128,54 @@ func TestTheLastResultLineWins(t *testing.T) {
 		t.Fatalf("%+v", res)
 	}
 }
+
+// A shared task lives in a submodule, which is a gitlink: its files are not in
+// the commit being pushed, so the spec has to travel with the push.
+func TestASpecCanTravelWithThePush(t *testing.T) {
+	spec := []byte("name: maintenance\nsteps:\n  - run: echo hi\n")
+	encoded, err := EncodeSpec(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsAny(encoded, "\n\x00") {
+		t.Errorf("encoded spec carries bytes an environment variable cannot: %q", encoded)
+	}
+	req, err := ParseOptions([]string{"spec=" + encoded})
+	if err != nil {
+		t.Fatalf("ParseOptions: %v", err)
+	}
+	if string(req.Spec) != string(spec) {
+		t.Errorf("spec came back as %q", req.Spec)
+	}
+}
+
+// gzip is what keeps a real task well inside the 64KiB a push option carries.
+func TestAnInlineSpecStaysSmallEnoughToSend(t *testing.T) {
+	spec := []byte(strings.Repeat("  - name: a step\n    run: bundle exec rspec\n", 500))
+	encoded, err := EncodeSpec(spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(encoded) >= 60000 {
+		t.Errorf("a %d byte spec encodes to %d bytes, too close to git's packet limit", len(spec), len(encoded))
+	}
+}
+
+func TestAMangledInlineSpecIsRefusedClearly(t *testing.T) {
+	for name, value := range map[string]string{
+		"not base64": "spec=!!!!",
+		"not gzip":   "spec=aGVsbG8=",
+		"empty":      "spec=",
+	} {
+		if _, err := ParseOptions([]string{value}); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
+func TestATaskPathIsStillEnoughOnItsOwn(t *testing.T) {
+	req, err := ParseOptions([]string{"task=ci/tasks/spec.yaml"})
+	if err != nil || req.Task != "ci/tasks/spec.yaml" || len(req.Spec) != 0 {
+		t.Errorf("plain git push must keep working: %+v %v", req, err)
+	}
+}
