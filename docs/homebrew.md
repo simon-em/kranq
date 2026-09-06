@@ -22,6 +22,21 @@ The url has to be given explicitly. `brew tap simontlbt/forge` on its own would
 look for `github.com/simontlbt/homebrew-forge`, which is the naming convention
 the shorthand assumes; passing the url says where it really is.
 
+## "Untrusted" is expected
+
+Homebrew 6 will not load formulae from a third-party tap until you say so, and
+`brew tap-info simontlbt/forge` reports **Untrusted** for the tap itself.
+Installing it by its full name is the consent, so nothing extra is needed:
+
+```sh
+$ brew install simontlbt/forge/forge      # works, non-interactively
+$ cat ~/.homebrew/trust.json
+{ "trustedformulae": ["https://github.com/simontlbt/forge/forge"] }
+```
+
+Verified by deleting that file and installing again with stdin closed. To trust
+the whole tap ahead of time instead: `brew trust --tap simontlbt/forge`.
+
 ## Always use the full name
 
 **`brew install forge` installs something else.** `homebrew/core` has a `forge`

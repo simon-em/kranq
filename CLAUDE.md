@@ -293,3 +293,9 @@ Visualization" library, so a plain `brew install forge` installs a graphics libr
 brew command in the docs, the caveats and the `forge upgrade` refusal names the tap:
 `simontlbt/forge/forge`. Once ours is installed the short name does resolve to it, but
 nothing should depend on that.
+
+**Homebrew 6 requires tap trust, and `brew tap-info` will say "Untrusted" for this tap
+forever.** That is not a problem to fix: installing by full name is itself the consent, and
+brew records it in `~/.homebrew/trust.json`. Verified by deleting that file and installing
+again with stdin closed — it succeeds. `brew trust --tap simontlbt/forge` trusts the whole
+tap up front if you would rather.
