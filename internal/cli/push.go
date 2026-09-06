@@ -71,7 +71,7 @@ func runPush(env Env, args []string) int {
 		return exitcode.Misconfigured
 	}
 
-	options := []string{"-o", "task=" + positional[0]}
+	options := []string{"-o", "task_file=" + positional[0]}
 	// The spec travels with the push rather than being read out of the commit,
 	// so a task that lives in a submodule, or one you have edited and not
 	// committed, still runs. A submodule is a gitlink: its files are not in the

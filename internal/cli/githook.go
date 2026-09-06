@@ -102,7 +102,7 @@ func say(env Env, format string, args ...any) {
 func hookValidate(env Env, req gitsrv.Request, parseErr error, updates []update) int {
 	if parseErr != nil {
 		say(env, "%v", parseErr)
-		say(env, "for example: git push kranq HEAD:refs/kranq/run -o task=ci/tasks/spec.yaml")
+		say(env, "for example: git push kranq HEAD:main -o task_file=ci/tasks/spec.yaml")
 		return exitcode.InvalidSpec
 	}
 	live := 0
@@ -201,6 +201,7 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 		return refused(env, err.Error())
 	}
 	say(env, "task %s queued from %s", task.ID, commit[:12])
+	release(env, ref, commit, task.ID)
 
 	if req.Detach {
 		say(env, "detached; follow it with: kranq logs %s -f", task.ID)
@@ -223,6 +224,45 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 	fmt.Fprintf(env.Stderr, "%s id=%s status=%s exit=%d\n",
 		gitsrv.ResultMarker, final.ID, final.Status, final.ExitCode)
 	return exitcode.OK
+}
+
+// release keeps the objects and gives the ref name back.
+//
+// Pushing the same commit to the same ref twice is a no-op: git says
+// "Everything up-to-date" and runs no hook, so the second run never happens.
+// That is not an edge case, it is `git push kranq HEAD:main` twice, and two
+// parallel pipeline steps pushing one commit. Moving the ref aside means the
+// next push is always a create.
+//
+// The objects have to stay reachable first, or they are unreferenced until the
+// job clones them, and they are still what the next push negotiates against:
+// without them git would resend the whole history every time.
+func release(env Env, ref, commit, taskID string) {
+	dir := gitDir()
+	keep := "refs/kranq/src/" + taskID
+	if err := git(dir, "update-ref", keep, commit); err != nil {
+		say(env, "could not retain %s, leaving %s in place: %v", short(commit), ref, err)
+		return
+	}
+	if err := git(dir, "update-ref", "-d", ref, commit); err != nil {
+		say(env, "could not release %s: %v", ref, err)
+	}
+}
+
+func git(dir string, args ...string) error {
+	cmd := exec.Command("git", append([]string{"--git-dir", dir}, args...)...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func short(sha string) string {
+	if len(sha) > 12 {
+		return sha[:12]
+	}
+	return sha
 }
 
 // A run that never started still owes the client a verdict. Without one it

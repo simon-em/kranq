@@ -7,7 +7,7 @@ import (
 
 func TestParseOptions(t *testing.T) {
 	req, err := ParseOptions([]string{
-		"task=ci/tasks/spec.yaml",
+		"task_file=ci/tasks/spec.yaml",
 		"label=spec",
 		"branch=feature/x",
 		"keep-vm=on-failure",
@@ -173,9 +173,52 @@ func TestAMangledInlineSpecIsRefusedClearly(t *testing.T) {
 	}
 }
 
-func TestATaskPathIsStillEnoughOnItsOwn(t *testing.T) {
-	req, err := ParseOptions([]string{"task=ci/tasks/spec.yaml"})
-	if err != nil || req.Task != "ci/tasks/spec.yaml" || len(req.Spec) != 0 {
-		t.Errorf("plain git push must keep working: %+v %v", req, err)
+
+
+// git refuses a push option containing a literal newline, so a task sent inline
+// has to spell its line breaks:
+//
+//	fatal: push options must not have new line characters
+func TestATaskCanBeSentInlineWithEscapedNewlines(t *testing.T) {
+	req, err := ParseOptions([]string{`task=name: demo\nsteps:\n  - run: echo hi`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "name: demo\nsteps:\n  - run: echo hi"
+	if string(req.Spec) != want {
+		t.Errorf("spec = %q, want %q", req.Spec, want)
+	}
+}
+
+// A run: block is shell, where a backslash is ordinary text. Rewriting anything
+// but \n and \\ would quietly corrupt the command being run.
+func TestOnlyNewlineAndBackslashAreUnescaped(t *testing.T) {
+	req, err := ParseOptions([]string{`task=run: grep '\d' file && printf 'a\tb'\nname: x`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(req.Spec)
+	if !strings.Contains(got, `grep '\d'`) || !strings.Contains(got, `printf 'a\tb'`) {
+		t.Errorf("backslashes were rewritten: %q", got)
+	}
+	if strings.Count(got, "\n") != 1 {
+		t.Errorf("want exactly the one escaped newline, got %q", got)
+	}
+}
+
+func TestTaskFileIsThePathForm(t *testing.T) {
+	req, err := ParseOptions([]string{"task_file=ci/tasks/spec.yaml"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.Task != "ci/tasks/spec.yaml" || len(req.Spec) != 0 {
+		t.Errorf("task_file should name a path and send no inline spec: %+v", req)
+	}
+}
+
+func TestNeitherFormIsAUsefulError(t *testing.T) {
+	_, err := ParseOptions([]string{"label=x"})
+	if err == nil || !strings.Contains(err.Error(), "task_file") || !strings.Contains(err.Error(), "task=") {
+		t.Errorf("error = %v, want it to name both ways of giving a task", err)
 	}
 }

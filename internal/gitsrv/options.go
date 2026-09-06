@@ -46,8 +46,13 @@ func ParseOptions(options []string) (Request, error) {
 				return req, fmt.Errorf("push option env.%s has no value; use -o env.%s=VALUE", key, key)
 			}
 			req.Env[key] = value
-		case name == "task":
+		case name == "task_file":
 			req.Task = value
+		case name == "task":
+			// Inline, because a task worth running is not always a file in the
+			// repository being pushed. git refuses a push option containing a
+			// newline outright, so \n is spelled out and unescaped here.
+			req.Spec = []byte(unescape(value))
 		case name == "spec":
 			decoded, err := decodeSpec(value)
 			if err != nil {
@@ -67,7 +72,8 @@ func ParseOptions(options []string) (Request, error) {
 		}
 	}
 	if req.Task == "" && len(req.Spec) == 0 {
-		return req, fmt.Errorf("no task: push with -o task=<path to the spec inside the repo>")
+		return req, fmt.Errorf("no task: push with -o task_file=<path in the repo>, " +
+			"or -o task=<the spec itself, with \\n for line breaks>")
 	}
 	if len(req.Unknown) > 0 {
 		sort.Strings(req.Unknown)
@@ -181,4 +187,29 @@ func decodeSpec(value string) ([]byte, error) {
 		return nil, fmt.Errorf("the inline spec is empty")
 	}
 	return spec, nil
+}
+
+// git rejects a push option containing a literal newline, so an inline task
+// spells its line breaks. Only \n and \\ are recognised: a spec is YAML, where
+// a stray backslash is ordinary text, and rewriting anything else would corrupt
+// a shell command inside a run: block.
+func unescape(v string) string {
+	var b strings.Builder
+	for i := 0; i < len(v); i++ {
+		if v[i] != '\\' || i+1 >= len(v) {
+			b.WriteByte(v[i])
+			continue
+		}
+		switch v[i+1] {
+		case 'n':
+			b.WriteByte('\n')
+			i++
+		case '\\':
+			b.WriteByte('\\')
+			i++
+		default:
+			b.WriteByte(v[i])
+		}
+	}
+	return b.String()
 }
