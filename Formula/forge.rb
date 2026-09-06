@@ -39,9 +39,11 @@ class Forge < Formula
         forge install --deps-only --with-daemon # and run the daemon at login
         forge doctor                            # check this machine
 
-      Upgrade with `brew upgrade forge`, not `forge upgrade`: forge refuses to
-      replace a binary a package manager owns, because the next brew upgrade
-      would undo it.
+      Upgrade with `brew upgrade simontlbt/forge/forge`, not `forge upgrade`:
+      forge refuses to replace a binary a package manager owns, because the next
+      brew upgrade would undo it. Use the full name -- homebrew/core has an
+      unrelated `forge` (arrayfire's visualization library) that the short name
+      can reach instead.
     EOS
   end
 

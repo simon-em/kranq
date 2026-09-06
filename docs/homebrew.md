@@ -22,6 +22,21 @@ The url has to be given explicitly. `brew tap simontlbt/forge` on its own would
 look for `github.com/simontlbt/homebrew-forge`, which is the naming convention
 the shorthand assumes; passing the url says where it really is.
 
+## Always use the full name
+
+**`brew install forge` installs something else.** `homebrew/core` has a `forge`
+of its own — arrayfire's "High Performance Visualization" library — and the
+short name reaches that one:
+
+```
+$ brew info forge
+Warning: `forge` shadows `homebrew/core/forge`.
+```
+
+So every brew command here names the tap: `simontlbt/forge/forge`. Once ours is
+installed the short name resolves to it, but relying on that is how someone ends
+up with a graphics library and a confusing afternoon.
+
 ## Cutting a release
 
 Tag it, push the tag, then point the formula at the tarball and push that:
@@ -80,7 +95,7 @@ finds the lock held and gives up.
 ## Upgrading
 
 ```sh
-brew upgrade forge
+brew upgrade simontlbt/forge/forge
 ```
 
 **`forge upgrade` refuses to touch a binary a package manager owns.** Replacing
@@ -90,7 +105,7 @@ a file inside a Cellar leaves brew's record of it wrong, and the next
 ```
 $ forge upgrade ./forge
 forge: /opt/homebrew/bin/forge is managed by homebrew
-use `brew upgrade forge`
+use `brew upgrade simontlbt/forge/forge`
 replacing it here would be undone by the next brew upgrade
 ```
 

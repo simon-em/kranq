@@ -287,3 +287,9 @@ push the tag, then commit the tarball's sha256. The checksum commit necessarily 
 **`brew install` runs autoremove and will uninstall unrelated packages.** It took out
 `python@3.14` and `pycparser` the first time. `HOMEBREW_NO_INSTALL_CLEANUP=1` prevents it;
 check `brew missing` afterwards either way.
+
+**`forge` shadows `homebrew/core/forge`.** That one is arrayfire's "High Performance
+Visualization" library, so a plain `brew install forge` installs a graphics library. Every
+brew command in the docs, the caveats and the `forge upgrade` refusal names the tap:
+`simontlbt/forge/forge`. Once ours is installed the short name does resolve to it, but
+nothing should depend on that.

@@ -44,7 +44,7 @@ func runUpgrade(env Env, args []string) int {
 		fmt.Fprintln(env.Stderr, "usage: forge upgrade <path-to-new-forge> [--target PATH] [--force]")
 		return exitcode.Usage
 	}
-	return swap(env, upgradeTarget(*target), *force, "use `brew upgrade forge`",
+	return swap(env, upgradeTarget(*target), *force, "use `brew upgrade simontlbt/forge/forge`",
 		func(ctx context.Context, to string) (upgrade.Report, error) {
 			return upgrade.Install(ctx, rest[0], to)
 		})
