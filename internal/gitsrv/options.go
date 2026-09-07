@@ -21,8 +21,13 @@ type Request struct {
 	// commit being pushed: a shared task in a submodule is a gitlink, so its
 	// contents are simply not there, and neither is an edit you have not
 	// committed yet.
-	Spec    []byte
-	Label   string
+	Spec  []byte
+	Label string
+	// Repo is what the code is, which the URL used to decide. They came apart
+	// once one repository could hold every codebase: the URL says where objects
+	// are stored, this says what they are -- and it is what a fence and a task's
+	// own `repo:` are about.
+	Repo    string
 	Branch  string
 	Keep    string
 	Detach  bool
@@ -61,6 +66,8 @@ func ParseOptions(options []string) (Request, error) {
 			req.Spec = decoded
 		case name == "label":
 			req.Label = value
+		case name == "repo":
+			req.Repo = value
 		case name == "branch":
 			req.Branch = value
 		case name == "keep-vm":

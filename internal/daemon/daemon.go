@@ -144,6 +144,7 @@ func (d *Daemon) Submit(req ipc.SubmitRequest) (state.Task, error) {
 	t, err := svc.Prepare(svc.SubmitRequest{
 		SpecYAML:     []byte(req.Spec),
 		Repo:         req.Repo,
+		SourceRepo:   req.SourceRepo,
 		Branch:       req.Branch,
 		Label:        req.Label,
 		Env:          req.Env,

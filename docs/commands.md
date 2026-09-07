@@ -233,7 +233,9 @@ Setting up the machine other people push to. See [push.md](advanced/push.md).
 
 ### `kranq setup [name] [--peer NAME]`
 
-Makes a machine ready to receive work: lima and the daemon. Naming a key also
+Makes a machine ready to receive work: lima, the daemon, and one repository that
+takes every codebase, linked at `~/kranq.git` so any key already in
+`authorized_keys` can reach it. Naming a key also
 authorises one and prints what a pusher needs; without a name nothing is issued
 and no address is read back, because whoever is standing on a single build
 machine already knows how to reach it.
@@ -258,8 +260,10 @@ Safe to re-run; re-running with a name rotates that key.
 Variables go to stdout, narration to stderr, so `> vars.env` is a file. The
 private key is printed once and kept nowhere.
 
-Nothing is pre-created: a repository comes into being on its first push, unless
-`KRANQ_AUTO_CREATE_REPOS` is off, in which case use `kranq repo create`.
+Nothing is pre-created per project. One repository is enough because a layer's
+name does not contain one, and what the code *is* travels as the `repo` push
+option instead. A project that wants its own still gets it: pushing to
+`ssh://host/dx.git` creates `dx` on arrival.
 
 The key is installed as a forced command, so it can push and fetch and do
 nothing else — no shell, no agent forwarding, no port forwarding. That is also
@@ -280,14 +284,18 @@ kranq repo create dx --host 142.127.69.2:333
 kranq repo rm dx         # the next push recreates it
 ```
 
+Most work needs none of this: `kranq setup` leaves a `kranq` repository that
+takes every codebase, and `-o repo=<name>` says which codebase a push is.
+`create` is for giving a project its own, and for the case below.
+
 `create` prints the repository's URL, and that URL is all a client needs when
 its key already reaches the machine: pushing to a **real path** runs stock
 `git-receive-pack`, and the hooks inside the repository are kranq. No forced
 command, no `receivepack` override.
 
-That is also why `create` is needed at all on this path — nothing kranq owns
-runs before git does, so there is nothing to create the repository on arrival.
-A push to the short `ssh://host/dx.git` form does create it, unless
+That is also why `create` exists on this path — nothing kranq owns runs before
+git does, so there is nothing to create the repository on arrival. A push to the
+short `ssh://host/dx.git` form does create it, unless
 `KRANQ_AUTO_CREATE_REPOS=false`.
 
 `--host [user@]host[:port]` is the address a client reaches the machine at; the

@@ -45,7 +45,7 @@ func (r *Runner) source(ctx context.Context, t state.Task, work, checkout string
 	if t.SourceCommit == "" || r.SourceRepos == "" {
 		return run.Source{}, nil
 	}
-	shared := filepath.Join(r.SourceRepos, t.Repo+".git")
+	shared := r.sharedRepo(sourceRepo(t))
 	staged := run.StageDir(work)
 	fmt.Fprintf(out, "using the pushed source at %s\n", short(t.SourceCommit))
 	branch, err := run.Stage(ctx, run.Source{Bare: shared, Commit: t.SourceCommit}, t.ID, staged, nil)
@@ -59,10 +59,19 @@ func (r *Runner) source(ctx context.Context, t state.Task, work, checkout string
 }
 
 func (r *Runner) sharedRepo(repo string) string {
-	if r.SourceRepos == "" {
+	if r.SourceRepos == "" || repo == "" {
 		return ""
 	}
 	return filepath.Join(r.SourceRepos, repo+".git")
+}
+
+// Where the objects are, which is not necessarily what the code is called.
+// Older task records predate the distinction and carry only the one name.
+func sourceRepo(t state.Task) string {
+	if t.SourceRepo != "" {
+		return t.SourceRepo
+	}
+	return t.Repo
 }
 
 func short(sha string) string {
@@ -145,6 +154,6 @@ func (r *Runner) execute(ctx context.Context, t state.Task, script string, out *
 		Fence:       r.fence(t),
 		Source:      source,
 		Kranqfile:   t.Kranqfile,
-		ResultRepo:  r.sharedRepo(t.Repo),
+		ResultRepo:  r.sharedRepo(sourceRepo(t)),
 	}, out)
 }

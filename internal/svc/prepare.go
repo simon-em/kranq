@@ -29,6 +29,7 @@ type Capabilities struct {
 type SubmitRequest struct {
 	SpecYAML     []byte
 	Repo         string
+	SourceRepo   string
 	Branch       string
 	Label        string
 	Env          map[string]string
@@ -71,6 +72,7 @@ func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (st
 		ID:           id,
 		Name:         spec.Name,
 		Repo:         repo,
+		SourceRepo:   req.SourceRepo,
 		Branch:       branch,
 		Label:        firstNonEmpty(req.Label, spec.Label, spec.Name),
 		Status:       state.StatusQueued,

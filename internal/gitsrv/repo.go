@@ -36,6 +36,13 @@ func RepoName(urlPath string) (string, error) {
 	return strings.TrimSuffix(segment, ".git"), nil
 }
 
+// DefaultRepo holds every codebase that has not asked for its own. A layer is
+// named by its parent, its command and the contents of what it copies, and by
+// nothing else -- no repository, no branch -- so two projects with the same
+// Kranqfile steps already share layers whichever repository they arrive in.
+// What the code is travels as the `repo` push option instead.
+const DefaultRepo = "kranq"
+
 type Store struct {
 	Root       string
 	KranqBin   string

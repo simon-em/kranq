@@ -154,3 +154,42 @@ func TestTheSpecCanNameItsBuildFileAndTheRequestOverridesIt(t *testing.T) {
 		t.Errorf("setup file = %q, want the request to win over the spec", t2.Kranqfile)
 	}
 }
+
+// One repository can hold every codebase, so where the objects landed and what
+// the code is are two different names now. Conflating them sent the runner to
+// look for the source in a repository that does not exist -- measured:
+// "fatal: not a git repository: '.../alpha.git'" for code pushed to kranq.git.
+func TestWhereTheObjectsAreIsNotWhatTheCodeIs(t *testing.T) {
+	spec := []byte("name: t\nsteps:\n  - run: true\n")
+	got, err := Prepare(SubmitRequest{
+		SpecYAML:   spec,
+		Repo:       "alpha",
+		SourceRepo: "kranq",
+		Branch:     "main",
+	}, Capabilities{}, time.Now(), "id-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Repo != "alpha" {
+		t.Errorf("Repo = %q, want what the pusher said the code is", got.Repo)
+	}
+	if got.SourceRepo != "kranq" {
+		t.Errorf("SourceRepo = %q, want where the push landed", got.SourceRepo)
+	}
+}
+
+// A push that named no repository is the old shape, where the two were the
+// same. Nothing should start depending on SourceRepo being set.
+func TestARequestWithOneNameStillWorks(t *testing.T) {
+	got, err := Prepare(SubmitRequest{
+		SpecYAML: []byte("name: t\nsteps:\n  - run: true\n"),
+		Repo:     "dx",
+		Branch:   "main",
+	}, Capabilities{}, time.Now(), "id-2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Repo != "dx" || got.SourceRepo != "" {
+		t.Errorf("Repo=%q SourceRepo=%q, want dx and empty", got.Repo, got.SourceRepo)
+	}
+}

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/simon-em/kranq/internal/authkeys"
 	"github.com/simon-em/kranq/internal/exitcode"
+	"github.com/simon-em/kranq/internal/gitsrv"
 	"github.com/simon-em/kranq/internal/peer"
 )
 
@@ -66,13 +68,19 @@ func runSetup(env Env, args []string) int {
 		fmt.Fprintln(env.Stderr)
 	}
 
+	where, guessed := resolveAddr(*host, *port)
+	if !*keyOnly {
+		if code := ensureDefaultRepo(env, where, guessed); code != exitcode.OK {
+			return code
+		}
+	}
+
 	if name == "" {
-		fmt.Fprintln(env.Stderr, "to let something push here, give the key a name:")
+		fmt.Fprintln(env.Stderr, "\nto issue a key of its own to something that cannot already ssh here:")
 		fmt.Fprintln(env.Stderr, "  kranq setup ci-dx")
 		return exitcode.OK
 	}
 
-	where, guessed := resolveAddr(*host, *port)
 	dir, err := os.MkdirTemp("", "kranq-setup-*")
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
@@ -99,6 +107,74 @@ func runSetup(env Env, args []string) int {
 		fmt.Fprintln(env.Stderr, "comes in through a forwarded port or another name, pass it: --host addr:port")
 	}
 	return exitcode.OK
+}
+
+// One repository takes every codebase, reached by a path in the home directory
+// so that any key already in authorized_keys can push to it: a real path needs
+// nothing intercepting the connection, and ~ is the only place a client can
+// name without knowing where kranq keeps its state.
+//
+// git sends "/kranq.git" for ssh://host/kranq.git and "~/kranq.git" for
+// ssh://host/~/kranq.git -- tested -- and only the second lands anywhere a
+// person can create without root.
+func ensureDefaultRepo(env Env, where addr, guessed bool) int {
+	store := repoStore()
+	dir, err := store.Ensure(context.Background(), gitsrv.DefaultRepo)
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
+		return exitcode.InternalError
+	}
+	link, err := defaultRepoLink()
+	if err != nil {
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
+		return exitcode.InternalError
+	}
+	if err := linkRepo(dir, link); err != nil {
+		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
+		return exitcode.InternalError
+	}
+	fmt.Fprintf(env.Stderr, "\nAnything can push here, whatever the codebase:\n\n")
+	fmt.Fprintf(env.Stderr, "  KRANQ_URL=ssh://%s@%s:%d/~/%s.git\n", where.Login, where.Host, where.Port, gitsrv.DefaultRepo)
+	// Only one symlink is needed for every form of the address: git appends
+	// .git when it resolves a bare name, tested against this repository with
+	// the plain symlink removed.
+	if where.Port == 22 {
+		fmt.Fprintf(env.Stderr, "  git remote add kranq %s@%s:%s\n", where.Login, where.Host, gitsrv.DefaultRepo)
+	} else {
+		fmt.Fprintf(env.Stderr, "\n(the short %s@%s:%s form carries no port, so it is out on %d)\n",
+			where.Login, where.Host, gitsrv.DefaultRepo, where.Port)
+	}
+	if guessed {
+		fmt.Fprintln(env.Stderr, "\n(that address is the one this machine was reached on; pass the outside")
+		fmt.Fprintln(env.Stderr, "one with --host addr:port if a client comes in through a forwarded port)")
+	}
+	return exitcode.OK
+}
+
+func defaultRepoLink() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, gitsrv.DefaultRepo+".git"), nil
+}
+
+// Replaced only when it is already a symlink. Anything else there was put there
+// by a person, and silently removing a repository would be the worst possible
+// way to find that out.
+func linkRepo(dir, link string) error {
+	info, err := os.Lstat(link)
+	switch {
+	case err == nil && info.Mode()&os.ModeSymlink == 0:
+		return fmt.Errorf("%s exists and is not a symlink; move it aside", link)
+	case err == nil:
+		if err := os.Remove(link); err != nil {
+			return err
+		}
+	case !os.IsNotExist(err):
+		return err
+	}
+	return os.Symlink(dir, link)
 }
 
 // From a laptop there is nothing to type: the peer registry already holds the

@@ -26,20 +26,33 @@ The tap needs the URL because the repository is not named `homebrew-kranq`.
 
 ## Letting something push to it
 
-If the pusher's key already reaches the machine, it can already push: a
-repository given by its **real path** needs nothing intercepting the
-connection, because stock `git-receive-pack` runs and the hooks inside it are
-kranq. One command prints the URL.
+`setup` leaves one repository that takes every codebase, at a path any key
+already in `authorized_keys` can reach:
 
-```sh
-kranq repo create dx --host 142.127.69.2:333
-#   git remote add kranq ssh://macmini@142.127.69.2:333/~/.kranq/repos/dx.git
+```
+KRANQ_URL=ssh://macmini@142.127.69.2:333/~/kranq.git
 ```
 
-That URL is the whole of the client's configuration — no forced command, no
-`receivepack` override, no new credential. The one thing it does not do is
-create the repository on demand, because nothing kranq owns runs before git
-does; `repo create` is that, once per project.
+That is the whole of the client's configuration. No forced command, no
+`receivepack` override, no new credential, and nothing to create per project —
+pushing to a **real path** runs stock `git-receive-pack`, and the hooks inside
+the repository are kranq.
+
+**One repository is enough because a layer's name does not contain one.** A
+layer is a hash of its parent, its command and the contents of what it copies,
+so two projects with the same Kranqfile steps already share layers wherever
+they arrive. What the code *is* travels separately, as a `repo` push option,
+which is what a fence and a spec's own `repo:` are about.
+
+On port 22 the short form works too, since git resolves a bare name by
+appending `.git`:
+
+```sh
+git remote add kranq macmini@142.127.69.2:kranq
+```
+
+Not on any other port: scp-style syntax has no field for one, and git reads
+`host:333:kranq` as a path called `333:kranq`. Use the `ssh://` form there.
 
 To issue a confined credential instead — a key that can push and fetch and
 nothing else — name one:

@@ -24,9 +24,15 @@ const (
 )
 
 type Task struct {
-	ID           string            `json:"id"`
-	Name         string            `json:"name"`
-	Repo         string            `json:"repo"`
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Repo string `json:"repo"`
+	// SourceRepo is the bare repository the push landed in, which is where the
+	// objects are and where the result goes back. Repo is what the code *is*,
+	// which a fence and a spec's own `repo:` are about. They were the same
+	// thing until one repository could hold every codebase. Empty means they
+	// still are.
+	SourceRepo   string            `json:"source_repo,omitempty"`
 	Branch       string            `json:"branch"`
 	Label        string            `json:"label"`
 	Status       Status            `json:"status"`

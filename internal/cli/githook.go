@@ -216,12 +216,20 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 	if branch == "" {
 		branch = branchFromRef(ref)
 	}
+	// The repository the push landed in is only where the objects went. What
+	// the code *is* comes from the pusher, so that one repository can hold
+	// every codebase without a task's fence or its own `repo:` being wrong.
+	source := repo
+	if req.Repo != "" {
+		repo = req.Repo
+	}
 
 	client := ipc.NewClient(socket)
 	ctx := context.Background()
 	task, err := client.Submit(ctx, ipc.SubmitRequest{
 		Spec:         string(spec),
 		Repo:         repo,
+		SourceRepo:   source,
 		Branch:       branch,
 		Label:        req.Label,
 		Env:          req.Env,

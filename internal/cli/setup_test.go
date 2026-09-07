@@ -178,3 +178,47 @@ func TestTheNoteMatchesWhatWasPrinted(t *testing.T) {
 		t.Error("the note does not say the key is not stored")
 	}
 }
+
+// One symlink serves every form of the address, because git appends .git when
+// it resolves a bare name -- tested against a real repository with the plain
+// symlink removed. So ~/kranq.git also answers to ~/kranq and to host:kranq.
+func TestTheDefaultRepoIsLinkedWhereAClientCanNameIt(t *testing.T) {
+	home := t.TempDir()
+	dir := filepath.Join(home, ".kranq", "repos", "kranq.git")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(home, "kranq.git")
+	if err := linkRepo(dir, link); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.Readlink(link)
+	if err != nil || got != dir {
+		t.Fatalf("link = %q, %v; want %q", got, err, dir)
+	}
+	// Idempotent: setup is meant to be re-run.
+	if err := linkRepo(dir, link); err != nil {
+		t.Fatalf("relinking failed: %v", err)
+	}
+}
+
+// Anything at that path that is not a symlink was put there by a person, and
+// removing a repository to make room would be the worst way for them to find
+// out.
+func TestLinkingRefusesToReplaceSomethingReal(t *testing.T) {
+	home := t.TempDir()
+	link := filepath.Join(home, "kranq.git")
+	if err := os.MkdirAll(link, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := linkRepo(filepath.Join(home, "target"), link)
+	if err == nil {
+		t.Fatal("a real directory was replaced")
+	}
+	if !strings.Contains(err.Error(), "not a symlink") {
+		t.Errorf("error = %v, want it to say what is in the way", err)
+	}
+	if _, statErr := os.Stat(link); statErr != nil {
+		t.Errorf("the directory was removed anyway: %v", statErr)
+	}
+}
