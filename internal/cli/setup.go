@@ -15,10 +15,14 @@ import (
 	"github.com/simon-em/kranq/internal/peer"
 )
 
-// kranq setup makes a machine ready to receive work and authorises a key to
-// send it, which used to be `install` and then `setup-git`. Everything is
-// optional: run it with no arguments on the build machine, or with --peer from
-// a laptop, where the address is already known.
+// kranq setup makes a machine ready to receive work, and only issues a
+// credential when asked for one by name. Nobody standing on a single build
+// machine needs its own address read back to them, and a private key printed to
+// a terminal that did not ask for it is scrollback nobody wanted.
+//
+//	kranq setup           make this machine ready
+//	kranq setup ci-dx     ... and authorise a key called ci-dx, printing its
+//	                      address and key for whoever will push
 //
 // The far side of a push is provisioned so the near side needs nothing: no
 // receive-pack override, no upload-pack override, no shell on the key. A
@@ -43,9 +47,10 @@ func runSetup(env Env, args []string) int {
 		fmt.Fprintln(env.Stderr, "usage: kranq setup [name] [--peer NAME] [--host ADDR] [--key FILE]")
 		return exitcode.Usage
 	}
-	name := "ci"
-	if len(rest) == 1 {
-		name = rest[0]
+	name := first(rest)
+	if name == "" && (*pub != "" || *keyOnly) {
+		fmt.Fprintln(env.Stderr, "kranq: name the key: kranq setup <name> [--key FILE]")
+		return exitcode.Usage
 	}
 
 	if *on != "" {
@@ -59,6 +64,12 @@ func runSetup(env Env, args []string) int {
 			return code
 		}
 		fmt.Fprintln(env.Stderr)
+	}
+
+	if name == "" {
+		fmt.Fprintln(env.Stderr, "to let something push here, give the key a name:")
+		fmt.Fprintln(env.Stderr, "  kranq setup ci-dx")
+		return exitcode.OK
 	}
 
 	where, guessed := resolveAddr(*host, *port)
@@ -113,7 +124,11 @@ func setupOnPeer(env Env, peerName, name, pub string, keyOnly bool) int {
 // --host is the peer's own registered address, which is the one thing the
 // machine on the far side cannot work out for itself.
 func peerSetupCommand(bin, ssh, name string, keyOnly bool) string {
-	cmd := fmt.Sprintf("%s setup %s --host %s", remotePath(bin), shellQuote(name), shellQuote(ssh))
+	cmd := remotePath(bin) + " setup"
+	if name != "" {
+		cmd += " " + shellQuote(name)
+	}
+	cmd += " --host " + shellQuote(ssh)
 	if keyOnly {
 		cmd += " --key-only"
 	}
@@ -180,10 +195,15 @@ func writeVars(env Env, a addr, private string) {
 		fmt.Fprintln(env.Stdout, "EOF")
 	}
 	fmt.Fprintln(env.Stderr)
-	fmt.Fprintln(env.Stderr, "Those three lines are the pipeline's variables.")
-	fmt.Fprintln(env.Stderr, "KRANQ_PEER is the only one it must have. The other two are for a")
-	fmt.Fprintln(env.Stderr, "caller with no ssh identity of its own; set KRANQ_SSH_KEY secured. The")
-	fmt.Fprintln(env.Stderr, "private key is printed once and kept nowhere, so run this again to rotate.")
+	if private != "" {
+		fmt.Fprintln(env.Stderr, "Those are the pipeline's variables. KRANQ_PEER is the only one it must")
+		fmt.Fprintln(env.Stderr, "have; the others are for a caller with no ssh identity of its own. Set")
+		fmt.Fprintln(env.Stderr, "KRANQ_SSH_KEY secured. The private key is printed once and kept nowhere,")
+		fmt.Fprintln(env.Stderr, "so run this again to rotate it.")
+	} else {
+		fmt.Fprintln(env.Stderr, "Those are the pipeline's variables, plus the private half of the key you")
+		fmt.Fprintln(env.Stderr, "supplied, which kranq never had. KRANQ_PEER is the only one it must have.")
+	}
 	fmt.Fprintln(env.Stderr)
 	fmt.Fprintln(env.Stderr, "Nothing else is needed on the client: no receive-pack override, no")
 	fmt.Fprintln(env.Stderr, "upload-pack override. The key runs kranq as its forced command, so the")

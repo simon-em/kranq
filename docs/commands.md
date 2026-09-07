@@ -233,15 +233,19 @@ Setting up the machine other people push to. See [push.md](advanced/push.md).
 
 ### `kranq setup [name] [--peer NAME]`
 
-Makes a machine ready to receive work and authorises a key to send it: lima, the
-daemon, and an `authorized_keys` entry. Everything is optional and it is safe to
-re-run — doing so rotates the key.
+Makes a machine ready to receive work: lima and the daemon. Naming a key also
+authorises one and prints what a pusher needs; without a name nothing is issued
+and no address is read back, because whoever is standing on a single build
+machine already knows how to reach it.
 
 ```sh
-kranq setup                                  # on the build machine
-kranq setup --peer mini-1                    # from a laptop
-kranq setup ci-dx --host 142.127.69.2:333    # naming the key and the address
+kranq setup                                  # the machine, and nothing else
+kranq setup ci-dx                            # ... and a key for a pipeline
+kranq setup ci-dx --key ci-dx.pub            # ... one whose private half stays yours
+kranq setup ci-dx --peer mini-1              # from a laptop, which knows the address
 ```
+
+Safe to re-run; re-running with a name rotates that key.
 
 | Flag | What |
 | --- | --- |

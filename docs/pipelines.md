@@ -20,11 +20,11 @@ not.
 ## One command on the build machine
 
 ```sh
-kranq setup
+kranq setup ci-dx
 ```
 
-It installs lima, starts the daemon, authorises a key, and prints what the
-pipeline needs:
+`kranq setup` alone makes the machine ready and issues nothing. Naming a key is
+what asks for a credential, and then it prints what the pipeline needs:
 
 ```
 KRANQ_PEER=macmini@142.127.69.2:333
@@ -47,7 +47,7 @@ you arrived on and says that it guessed. Pass `--host 142.127.69.2:333`, or run
 it from a laptop, where the peer registry already holds it:
 
 ```sh
-kranq setup --peer mini-1
+kranq setup ci-dx --peer mini-1
 ```
 
 **Why there is no `receivepack` to configure.** The key is installed as a forced

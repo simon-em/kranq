@@ -22,9 +22,16 @@ kranq setup
 ```
 
 The tap needs the URL because the repository is not named `homebrew-kranq`.
+`setup` installs lima and starts the daemon. That is the machine done.
 
-`setup` installs lima, starts the daemon, authorises an ssh key, and prints
-what the pipeline needs:
+## Letting something push to it
+
+Name a key, and `setup` issues one and prints what the pusher needs:
+
+```sh
+kranq setup ci-dx
+```
+
 
 ```
 KRANQ_PEER=macmini@142.127.69.2:333
@@ -37,8 +44,19 @@ EOF
 
 `KRANQ_PEER` is the only one that must be set; the other two are for a caller
 with no ssh identity of its own. Variables go to stdout and everything else to
-stderr, so `kranq setup > vars.env` is a file. The private key is printed once
-and kept nowhere — run it again to rotate.
+stderr, so `kranq setup ci-dx > vars.env` is a file. The private key is printed
+once and kept nowhere — run it again to rotate.
+
+Naming a key is the only thing that makes kranq print one. Bare `kranq setup`
+issues no credential and reads back no address, because whoever is standing on
+a single build machine already knows how to reach it.
+
+To keep the private half to yourself, generate it where it belongs and hand over
+only the public one:
+
+```sh
+kranq setup ci-dx --key ci-dx.pub
+```
 
 Nothing is pre-created: a repository comes into being on its first push.
 
@@ -49,7 +67,7 @@ where the address is already known:
 
 ```sh
 kranq peer add mini-1 --ssh macmini@142.127.69.2:333 --default
-kranq setup --peer mini-1
+kranq setup ci-dx --peer mini-1
 ```
 
 That key is a forced command: it can push and fetch and nothing else, and it is

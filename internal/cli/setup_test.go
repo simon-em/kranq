@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/simon-em/kranq/internal/exitcode"
 )
 
 // A known_hosts entry for a non-default port is written [host]:port. In the
@@ -126,5 +128,53 @@ func TestSettingUpAPeerSendsItsOwnAddress(t *testing.T) {
 	}
 	if !strings.HasSuffix(peerSetupCommand("~/.local/bin/kranq", "h", "ci", true), " --key-only") {
 		t.Error("--key-only did not reach the far side")
+	}
+	// No name means no key, and an empty positional would not say that.
+	if got := peerSetupCommand("~/.local/bin/kranq", "h", "", false); strings.Contains(got, "''") {
+		t.Errorf("remote command = %s, want no empty argument", got)
+	}
+}
+
+// Making a machine ready and issuing a credential are different requests. A
+// private key printed to a terminal that did not ask for one is scrollback
+// nobody wanted, and on a single node the address is already known to whoever
+// is standing on it.
+func TestSetupIssuesNoCredentialUnlessAKeyIsNamed(t *testing.T) {
+	code, out, msg := invoke(t, "setup", "--key-only")
+	if code != exitcode.Usage {
+		t.Errorf("exit = %d, want a usage error when --key has no name", code)
+	}
+	if strings.Contains(out+msg, "PRIVATE KEY") {
+		t.Error("a private key was printed")
+	}
+	if !strings.Contains(msg, "name the key") {
+		t.Errorf("the error does not say what to do:\n%s", msg)
+	}
+}
+
+// The closing note describes what was actually printed. It used to promise a
+// private key "printed once and kept nowhere" even when the caller had supplied
+// the public half and kranq never held one.
+func TestTheNoteMatchesWhatWasPrinted(t *testing.T) {
+	var out, msg strings.Builder
+	writeVars(Env{Stdout: &out, Stderr: &msg}, addr{"macmini", "192.0.2.1", 333}, "")
+	if strings.Contains(out.String(), "KRANQ_SSH_KEY") {
+		t.Error("a KRANQ_SSH_KEY was emitted for a key kranq did not generate")
+	}
+	if strings.Contains(msg.String(), "kept nowhere") {
+		t.Errorf("the note promises a private key that was never printed:\n%s", msg.String())
+	}
+	if !strings.Contains(msg.String(), "kranq never had") {
+		t.Errorf("the note does not say the key was supplied:\n%s", msg.String())
+	}
+
+	out.Reset()
+	msg.Reset()
+	writeVars(Env{Stdout: &out, Stderr: &msg}, addr{"macmini", "192.0.2.1", 333}, "-----BEGIN OPENSSH PRIVATE KEY-----\n")
+	if !strings.Contains(out.String(), "KRANQ_SSH_KEY<<EOF") {
+		t.Error("the generated key was not emitted as a heredoc")
+	}
+	if !strings.Contains(msg.String(), "kept nowhere") {
+		t.Error("the note does not say the key is not stored")
 	}
 }
