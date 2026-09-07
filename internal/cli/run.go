@@ -156,6 +156,7 @@ func runRun(env Env, args []string) int {
 		Env:         forward,
 		Checkout:    checkout,
 		ArtifactDir: *artifacts,
+		Artifacts:   spec.Artifacts,
 		RemoteBase:  *remote,
 		Keep:        keepPolicy,
 		Fence:       localFence(spec, *branch, *repo),

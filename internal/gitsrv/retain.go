@@ -14,18 +14,58 @@ import (
 // that git cannot compress.
 const DefaultTTL = 2 * 24 * time.Hour
 
-// Kept are the refs a run leaves behind: the source it was given, and the
-// commit it produced.
-var Kept = []string{"refs/kranq/src/", ResultRefPrefix, PassedRefPrefix}
+// Kept are the refs a run leaves behind: the source it was given, the commit
+// it produced, and the two legacy namespaces, which are listed only so that
+// what is already on disk ages out instead of living forever.
+var Kept = []string{
+	"refs/kranq/src/", TaskRefPrefix, OKRefPrefix,
+	legacyResultPrefix, legacyPassedPrefix,
+}
+
+// A run is a branch, and the name you push to is the name you pull from.
+//
+// It has to be under refs/heads or that symmetry does not exist: git's short
+// form resolves against refs/heads, so `git pull kranq task/<run>` finds
+// refs/heads/task/<run> and would not find the same run under refs/kranq/*.
+// A plain clone does not see refs/kranq/* either.
+const (
+	TaskRefPrefix = "refs/heads/task/"
+	// OKRefPrefix marks a run that passed. A push cannot carry an exit code --
+	// post-receive runs after the ref is accepted -- so the verdict is the
+	// presence or absence of a ref, and `git fetch` of a missing one exits 128.
+	//
+	// It is a separate name rather than something under the run's own, because
+	// refs/heads/task/<run> and refs/heads/task/<run>/ok cannot both exist.
+	OKRefPrefix = "refs/heads/ok/"
+	// AnonRef is where a push that has not chosen a run name lands, so that a
+	// person can push without inventing one and be told what it was called.
+	//
+	// "tasks" rather than "task" is the whole reason this works: a ref is a
+	// path, so refs/heads/task and refs/heads/task/<run> cannot coexist --
+	// tested, git refuses the second with "cannot lock ref 'refs/heads/task':
+	// 'refs/heads/task/<run>' exists", and refuses it in the other order too.
+	// refs/heads/tasks is a sibling of refs/heads/task/, not a parent.
+	AnonRef = "refs/heads/tasks"
+)
 
 const (
-	ResultRefPrefix = "refs/kranq/result/"
-	// PassedRefPrefix exists only so a pipeline can be pure git. A push cannot
-	// carry an exit code -- post-receive runs after the ref is accepted -- so
-	// the outcome is published as the presence or absence of a ref, and
-	// `git fetch` of a missing ref exits 128.
-	PassedRefPrefix = "refs/kranq/passed/"
+	legacyResultPrefix = "refs/kranq/result/"
+	legacyPassedPrefix = "refs/kranq/passed/"
 )
+
+// ResultRefPrefix is where a run's commit is first recorded, keyed by task id
+// rather than by run name, because that is the only name the runner knows. The
+// hook then publishes it under the run's own name, which is what the pusher
+// knows.
+const ResultRefPrefix = legacyResultPrefix
+
+// TaskRef and OKRef name the two refs a run publishes.
+func TaskRef(run string) string { return TaskRefPrefix + run }
+func OKRef(run string) string   { return OKRefPrefix + run }
+
+// ShortRef is what a caller types: git resolves it against refs/heads, so the
+// prefix is noise everywhere except inside this package.
+func ShortRef(ref string) string { return strings.TrimPrefix(ref, "refs/heads/") }
 
 // RunName is the last segment of the ref a push landed on, which is what a
 // client knows in advance: it chose it. Both the result and the pass ref are

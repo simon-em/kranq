@@ -262,6 +262,22 @@ Validation lives in the first, the run in the second.
 at `refs/heads`. The clone then succeeds and produces an empty tree, so kranq
 names each run's commit `refs/heads/kranq/<task-id>`.
 
+The same fact decides where a run lives: `refs/heads/task/<run>`. Only under
+`refs/heads` does the short form resolve, and that is what makes `git pull kranq
+task/<run>` the same name as the push — a run parked under `refs/kranq/*` could
+be reached by full refname and nothing else.
+
+**A ref is a path, so `refs/heads/task` and `refs/heads/task/<run>` cannot both
+exist.** Tested: git refuses the second with `cannot lock ref 'refs/heads/task':
+'refs/heads/task/<run>' exists`, and refuses it in the other order too. The
+landing pad for a push that has not named its run is therefore `refs/heads/tasks`
+— a sibling of the run namespace, not its parent.
+
+**A short push destination needs a branch.** From a detached HEAD, which is how
+a CI container checks out, git has nothing to infer `refs/heads` from and refuses
+with *the destination you provided is not a full refname*. `HEAD:tasks` is for a
+person; a client configures `+HEAD:refs/heads/task/<run>`.
+
 **Over http, output was not reaching the client as it was written.** Measured
 with a task printing a line every three seconds: over ssh the lines arrived three
 seconds apart, over http six lines came back as two clumps, because `net/http`

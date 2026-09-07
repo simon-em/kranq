@@ -35,7 +35,7 @@ id=$(kranq run ci/tasks/spec.yaml --detach) && kranq logs "$id" -f
 | `--repo` | `$CI_REPO`, `$BITBUCKET_REPO_SLUG` | repository slug |
 | `--branch` | `$CI_BRANCH`, `$BITBUCKET_BRANCH` | branch to check out |
 | `--label` | the task name | names the VM and the artifact directory |
-| `--artifacts DIR` | none | copy `ci-artifacts/` out into `DIR` |
+| `--artifacts DIR` | none | copy the spec's `artifacts:` path out into `DIR` |
 | `--remote` | `$KRANQ_GIT_REMOTE` | git remote base, e.g. `git@bitbucket.org:effetmonstre` |
 | `--env NAME=V`, `-e` | | repeatable; bare `-e NAME` forwards it from here |
 | `--keep-vm` | `never` | `never`, `on-failure`, `always` |

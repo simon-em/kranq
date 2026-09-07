@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"crypto/rand"
 	"flag"
 	"fmt"
 	"os"
@@ -87,13 +88,36 @@ func pushOptions() []string {
 }
 
 // A client that names no branch usually pushed to one, so the ref is the best
-// guess. A push meant only to carry objects lands outside refs/heads, and its
-// ref is a nonce that would be a nonsense branch name.
+// guess. A push that only carries objects lands on a run ref, whose name is a
+// nonce that would be a nonsense branch name.
 func branchFromRef(ref string) string {
+	if ref == gitsrv.AnonRef || strings.HasPrefix(ref, gitsrv.TaskRefPrefix) {
+		return "kranq-push"
+	}
 	if head, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
 		return head
 	}
 	return "kranq-push"
+}
+
+// runName is what the run will be called, which is also what the pusher pulls
+// from. A push that named one keeps it; a push to the anonymous ref gets one
+// minted here, and is told what it was.
+func runName(ref string) string {
+	if ref == gitsrv.AnonRef {
+		return mintRun()
+	}
+	return gitsrv.RunName(ref)
+}
+
+// The timestamp prefix is not decoration: retention reads it, because the name
+// is the only record of when a run happened that a ref carries.
+func mintRun() string {
+	var nonce [5]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return time.Now().UTC().Format("20060102T150405") + "-" + strconv.Itoa(os.Getpid())
+	}
+	return fmt.Sprintf("%s-%x", time.Now().UTC().Format("20060102T150405"), nonce)
 }
 
 // Everything printed here reaches the pushing terminal prefixed with "remote:".
@@ -104,7 +128,7 @@ func say(env Env, format string, args ...any) {
 func hookValidate(env Env, req gitsrv.Request, parseErr error, updates []update) int {
 	if parseErr != nil {
 		say(env, "%v", parseErr)
-		say(env, "for example: git push kranq HEAD:main -o task_file=ci/tasks/spec.yaml")
+		say(env, "for example: git push kranq HEAD:tasks -o task_file=ci/tasks/spec.yaml")
 		return exitcode.InvalidSpec
 	}
 	live := 0
@@ -176,6 +200,12 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 		return exitcode.OK
 	}
 
+	// A refused push leaves the landing pad holding the commit, and the next
+	// push of it says "Everything up-to-date": no hook, no run, and no word
+	// about why. By the time this runs, release has either moved it or nothing
+	// has, and deleting a ref that is already gone is not an error.
+	defer clearAnon(ref)
+
 	spec, err := specFor(req, commit)
 	if err != nil {
 		say(env, "%v", err)
@@ -203,7 +233,9 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 		return refused(env, err.Error())
 	}
 	say(env, "task %s queued from %s", task.ID, commit[:12])
-	release(env, ref, commit, task.ID)
+	run := runName(ref)
+	release(env, ref, run, commit, task.ID)
+	say(env, "pull it back with: git pull kranq %s", gitsrv.ShortRef(gitsrv.TaskRef(run)))
 	sweep(env)
 
 	if req.Detach {
@@ -220,39 +252,47 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 		say(env, "could not read the result: %v", err)
 		return exitcode.OK
 	}
-	publish(env, ref, final)
+	publish(env, run, final)
 	say(env, "task %s %s (exit %d)", task.ID, final.Status, final.ExitCode)
 	// A push cannot carry an exit code: post-receive runs after the ref has
 	// already been accepted, and nothing it returns reaches git's exit status.
 	// This line is the contract instead, and `kranq push` exits on it.
 	fmt.Fprintf(env.Stderr, "%s id=%s status=%s exit=%d%s\n",
 		gitsrv.ResultMarker, final.ID, final.Status, final.ExitCode, resultField(final.ResultRef))
-	if final.ResultRef != "" {
-		say(env, "what it produced is a commit: git fetch kranq %s", final.ResultRef)
-	}
 	return exitcode.OK
 }
 
-// release keeps the objects and gives the ref name back.
+// release makes the run pullable and keeps its objects alive.
 //
-// Pushing the same commit to the same ref twice is a no-op: git says
-// "Everything up-to-date" and runs no hook, so the second run never happens.
-// That is not an edge case, it is `git push kranq HEAD:main` twice, and two
-// parallel pipeline steps pushing one commit. Moving the ref aside means the
-// next push is always a create.
+// The run ref is the deliverable, not a place the objects were parked: whoever
+// pushed pulls it back from the same name, and until the job finishes it points
+// at what they pushed. Any other ref a push landed on is a landing pad, and is
+// cleared once the run has been published under its own name.
 //
-// The objects have to stay reachable first, or they are unreferenced until the
-// job clones them, and they are still what the next push negotiates against:
-// without them git would resend the whole history every time.
-func release(env Env, ref, commit, taskID string) {
+// The source is retained under its task id as well, because that is the name
+// the runner clones from, and because it is what the next push negotiates
+// against: without it git resends the whole history every time.
+func release(env Env, ref, run, commit, taskID string) {
 	dir := gitDir()
-	keep := "refs/kranq/src/" + taskID
-	if err := git(dir, "update-ref", keep, commit); err != nil {
-		say(env, "could not retain %s, leaving %s in place: %v", short(commit), ref, err)
+	if err := git(dir, "update-ref", "refs/kranq/src/"+taskID, commit); err != nil {
+		say(env, "could not retain %s: %v", short(commit), err)
+		return
+	}
+	// Anything that is not already the run ref is a landing pad, including a
+	// plain `HEAD:main`, and has to be cleared: a second push of the same
+	// commit to a ref that still holds it says "Everything up-to-date", runs no
+	// hook, and the job silently never happens. Retrying a failed pipeline step
+	// is the ordinary way to reach that.
+	task := gitsrv.TaskRef(run)
+	if task == ref {
+		return
+	}
+	if err := git(dir, "update-ref", task, commit); err != nil {
+		say(env, "could not publish the run as %s: %v", run, err)
 		return
 	}
 	if err := git(dir, "update-ref", "-d", ref, commit); err != nil {
-		say(env, "could not release %s: %v", ref, err)
+		say(env, "could not clear %s: %v", ref, err)
 	}
 }
 
@@ -283,6 +323,12 @@ func git(dir string, args ...string) error {
 	return nil
 }
 
+func clearAnon(ref string) {
+	if ref == gitsrv.AnonRef {
+		_ = git(gitDir(), "update-ref", "-d", ref)
+	}
+}
+
 func short(sha string) string {
 	if len(sha) > 12 {
 		return sha[:12]
@@ -303,35 +349,31 @@ func oneLine(v string) string {
 	return strings.Join(strings.Fields(v), " ")
 }
 
-// publish names the run's outcome under the ref the client pushed to, because
-// that is the only name it knows before the task exists. A pipeline made of
-// nothing but git commands reads the outcome by fetching:
+// publish moves the run ref onto what the job produced, so that the name the
+// pusher already pulled from now carries the result: files the task changed and
+// whatever it left in its artifacts directory, in the places it wrote them.
+// Artifacts and code changes stop being two mechanisms with two transports, and
+// a pipeline needs no archive step at all.
 //
-//	git fetch kranq refs/kranq/passed/<run>   # 128 if the run failed
-//
-// which is the only way a push can be made to turn a step red. post-receive
-// runs after the ref has been accepted, so `git push` exits 0 whatever the task
-// did -- measured, with a task exiting 12.
-func publish(env Env, pushed string, final state.Task) {
-	run := gitsrv.RunName(pushed)
+// The verdict is a second ref, because one fetch cannot both deliver a payload
+// and fail. Measured: `git pull <remote> task/<run> ok/<run>` with the second
+// ref missing exits 1 and merges nothing, so a failing run would take its own
+// report down with it -- which is exactly the report worth having.
+func publish(env Env, run string, final state.Task) {
 	if run == "" {
 		return
 	}
 	dir := gitDir()
 	if final.ResultRef != "" {
-		if err := git(dir, "update-ref", gitsrv.ResultRefPrefix+run, final.ResultRef); err != nil {
+		if err := git(dir, "update-ref", gitsrv.TaskRef(run), final.ResultRef); err != nil {
 			say(env, "could not publish the result as %s: %v", run, err)
 		}
 	}
 	if final.Status != state.StatusSucceeded {
 		return
 	}
-	if err := git(dir, "update-ref", gitsrv.PassedRefPrefix+run, final.ResultRef+"^{commit}"); err != nil {
-		// Without a result commit there is nothing to point at but the source,
-		// which is still a fine marker: the ref existing is the whole signal.
-		if err := git(dir, "update-ref", gitsrv.PassedRefPrefix+run, "refs/kranq/src/"+final.ID); err != nil {
-			say(env, "could not publish the pass marker: %v", err)
-		}
+	if err := git(dir, "update-ref", gitsrv.OKRef(run), gitsrv.TaskRef(run)); err != nil {
+		say(env, "could not publish the pass marker: %v", err)
 	}
 }
 

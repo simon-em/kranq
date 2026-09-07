@@ -153,7 +153,22 @@ kranqfile: Kranqfile.perf
 
 ## Artifacts
 
-Anything a job leaves in `ci-artifacts/` inside the checkout is collected, and
-`--artifacts DIR` copies it back out. Artifacts are fetched **even when the job
-fails**, which is when a test report is worth having. They live in the task's own
-directory, so two runs of the same branch cannot overwrite each other.
+`artifacts:` names a path inside the checkout, defaulting to `ci-artifacts`. Set
+it to wherever the tool that writes the output already puts it:
+
+```yaml
+artifacts: playwright/playwright-report
+```
+
+That path is committed even though it is almost always gitignored, which is what
+lets a run hand it back. Two ways to collect it:
+
+- **Pull the run.** `git pull --ff-only kranq task/<run>` brings back the job's
+  own commit: files it changed *and* the artifacts path, at the paths the job
+  wrote them. Nothing is unpacked or renamed, so a pipeline can point its own
+  artifact paths straight at them.
+- **`--artifacts DIR`**, which copies the directory out of the VM. Older, still
+  works, and does not need the repository the push landed in.
+
+Either way they come back **even when the job fails**, which is when a test
+report is worth having.

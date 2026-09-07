@@ -184,8 +184,13 @@ func TestEveryPushGoesToItsOwnRef(t *testing.T) {
 		t.Fatalf("two pushes share the ref %q, so the second would be a no-op", first)
 	}
 	for _, ref := range []string{first, second} {
-		if !strings.HasPrefix(ref, "refs/kranq/push/") {
-			t.Errorf("ref = %q, want it outside refs/heads so it is not mistaken for a branch", ref)
+		// Under refs/heads deliberately, which reverses what this used to
+		// assert. A run is pulled back from the name it was pushed to, and
+		// git's short form only resolves against refs/heads: a run parked
+		// under refs/kranq/* could be fetched by full refname and nothing
+		// else -- not `git pull kranq task/<run>`, not a plain clone.
+		if !strings.HasPrefix(ref, gitsrv.TaskRefPrefix) {
+			t.Errorf("ref = %q, want it under %s so it can be pulled back by name", ref, gitsrv.TaskRefPrefix)
 		}
 		if strings.Count(ref, "/") < 2 {
 			t.Errorf("ref = %q; git refuses a single-segment refname remotely", ref)

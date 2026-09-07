@@ -4,6 +4,7 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -115,25 +116,42 @@ func TestRunNameIsTheLastSegmentOfThePushedRef(t *testing.T) {
 	}
 }
 
-// The pass refs age out with everything else, or a busy machine accumulates one
-// per run forever.
-func TestPassRefsAreSweptToo(t *testing.T) {
+// Every namespace a run writes to has to age out, or a busy machine accumulates
+// a ref per run forever -- and these hold whole working trees, artifacts
+// included.
+func TestEveryRunNamespaceIsSwept(t *testing.T) {
 	now := time.Date(2026, 9, 6, 18, 0, 0, 0, time.UTC)
-	refs := []string{
-		PassedRefPrefix + "20260901T000000-old",
-		PassedRefPrefix + "20260906T175000-new",
-	}
-	got := Expired(refs, now, DefaultTTL)
-	if len(got) != 1 || got[0] != PassedRefPrefix+"20260901T000000-old" {
-		t.Errorf("expired = %v, want just the old one", got)
-	}
-	found := false
-	for _, k := range Kept {
-		if k == PassedRefPrefix {
-			found = true
+	for _, prefix := range []string{TaskRefPrefix, OKRefPrefix, "refs/kranq/src/"} {
+		refs := []string{prefix + "20260901T000000-old", prefix + "20260906T175000-new"}
+		got := Expired(refs, now, DefaultTTL)
+		if len(got) != 1 || got[0] != prefix+"20260901T000000-old" {
+			t.Errorf("%s expired = %v, want just the old one", prefix, got)
+		}
+		if !slices.Contains(Kept, prefix) {
+			t.Errorf("Sweep does not look at %s, so those refs would never be dropped", prefix)
 		}
 	}
-	if !found {
-		t.Errorf("Sweep does not look at %s, so they would never be dropped", PassedRefPrefix)
+}
+
+// The refs the previous naming left on disk still have to age out; nothing
+// writes them any more, so this is the only thing that will ever remove them.
+func TestTheOldNamespacesStillAgeOut(t *testing.T) {
+	for _, prefix := range []string{"refs/kranq/result/", "refs/kranq/passed/"} {
+		if !slices.Contains(Kept, prefix) {
+			t.Errorf("%s is not swept, so what is already on disk lives forever", prefix)
+		}
+	}
+}
+
+// refs/heads/task/<run> and refs/heads/task cannot coexist: a ref is a path.
+// Tested against git, which refuses the second with "cannot lock ref", in
+// either order. The anonymous landing pad is a sibling for that reason, and the
+// day someone "tidies" it to refs/heads/task this fails.
+func TestTheAnonymousRefIsNotInsideTheRunNamespace(t *testing.T) {
+	if strings.HasPrefix(AnonRef+"/", TaskRefPrefix) {
+		t.Fatalf("%s is inside %s; git would refuse every push to one while the other exists", AnonRef, TaskRefPrefix)
+	}
+	if !strings.HasPrefix(TaskRefPrefix, "refs/heads/") || !strings.HasPrefix(OKRefPrefix, "refs/heads/") {
+		t.Fatal("a run outside refs/heads cannot be pulled back by its short name")
 	}
 }

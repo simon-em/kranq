@@ -137,18 +137,20 @@ func runPush(env Env, args []string) int {
 	return exitcode.Unreachable
 }
 
-// A ref that has already been pushed makes git say "Everything up-to-date" and
-// run no hook at all, so pushing the same commit twice would do nothing. That is
-// not an edge case: retrying a failed pipeline step is the ordinary way to
-// re-run a job. The destination ref is therefore unique per push, which costs
-// nothing because the branch the run reports comes from -o branch, not from
-// where the objects landed.
+// A run is a branch under refs/heads/task/, so that whoever pushed can pull the
+// result back from the name they pushed to.
+//
+// The name is unique per push because a ref that already points at this commit
+// makes git say "Everything up-to-date" and run no hook at all. That is not an
+// edge case: retrying a failed pipeline step is the ordinary way to re-run a
+// job. It costs nothing, because the branch a run reports comes from -o branch,
+// not from where the objects landed.
 func pushRef() string {
 	var nonce [8]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
-		return fmt.Sprintf("refs/kranq/push/%d", time.Now().UnixNano())
+		return fmt.Sprintf("%s%d", gitsrv.TaskRefPrefix, time.Now().UnixNano())
 	}
-	return fmt.Sprintf("refs/kranq/push/%s-%x", time.Now().UTC().Format("20060102T150405"), nonce)
+	return fmt.Sprintf("%s%s-%x", gitsrv.TaskRefPrefix, time.Now().UTC().Format("20060102T150405"), nonce)
 }
 
 func refusalCode(output string) int {

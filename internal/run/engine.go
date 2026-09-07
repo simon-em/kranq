@@ -57,11 +57,14 @@ type Request struct {
 	Env         map[string]string
 	Checkout    string
 	ArtifactDir string
-	RemoteBase  string
-	Keep        KeepPolicy
-	Fence       *FencePlan
-	Source      Source
-	Kranqfile   string
+	// Artifacts is the path inside the checkout the task writes its output to,
+	// as the spec declares it.
+	Artifacts  string
+	RemoteBase string
+	Keep       KeepPolicy
+	Fence      *FencePlan
+	Source     Source
+	Kranqfile  string
 	// Where the run's own commit is recorded, so whoever pushed can fetch it.
 	ResultRepo string
 }

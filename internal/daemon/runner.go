@@ -12,6 +12,7 @@ import (
 	"github.com/simon-em/kranq/internal/run"
 	"github.com/simon-em/kranq/internal/sshagent"
 	"github.com/simon-em/kranq/internal/state"
+	"github.com/simon-em/kranq/internal/task"
 )
 
 type Runner struct {
@@ -123,6 +124,12 @@ func (r *Runner) execute(ctx context.Context, t state.Task, script string, out *
 	}
 
 	keep, _ := run.ParseKeep(t.Keep)
+	// Re-read rather than plumbed through: the spec is already on the record,
+	// and one parse is cheaper than a field every caller has to remember.
+	artifacts := ""
+	if spec, err := task.Parse([]byte(t.SpecYAML)); err == nil {
+		artifacts = spec.Artifacts
+	}
 	return r.Engine.Execute(ctx, run.Request{
 		TaskID:      t.ID,
 		Repo:        t.Repo,
@@ -132,6 +139,7 @@ func (r *Runner) execute(ctx context.Context, t state.Task, script string, out *
 		Env:         t.Env,
 		Checkout:    checkout,
 		ArtifactDir: r.ArtifactsDir(t.ID),
+		Artifacts:   artifacts,
 		RemoteBase:  r.RemoteBase,
 		Keep:        keep,
 		Fence:       r.fence(t),
