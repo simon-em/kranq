@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -75,9 +76,9 @@ func collect(ctx context.Context) []doctor.Check {
 		gitCheck(ctx),
 		limaCheck(ctx, home),
 		doctor.DiskSpace(hostres.FreeDisk(home), imagePairBytes),
-		claudeCheck(cfg.ClaudeToken),
 	}
 	daemonVersion, owned, reachable := daemonState(ctx)
+	checks = append(checks, claudeCheck(ctx, cfg.ClaudeToken, reachable))
 	checks = append(checks, doctor.VersionMatch(Version, daemonVersion))
 	// Without a daemon there is nothing to own a VM, so every VM would look
 	// orphaned. That is a false alarm, not a finding.
@@ -164,15 +165,53 @@ func limaCheck(ctx context.Context, home string) doctor.Check {
 	return doctor.Check{Name: "lima", Level: doctor.OK, Detail: deps.LimaVersion + " at " + bin}
 }
 
-func claudeCheck(token string) doctor.Check {
-	if token == "" {
-		return doctor.Check{
-			Name: "claude token", Level: doctor.Warn, Fix: "kranq auth claude --stdin",
-			Detail: "absent, so tasks with a claude step will be refused",
+// The daemon is asked rather than this process, because they do not read the
+// same environment and it is the daemon's answer that decides whether a claude
+// task runs. Measured on the build machine: the token was exported from
+// .zshrc, so `kranq doctor` in a login shell said "present" while every claude
+// task was refused with "the runner has no CLAUDE_CODE_OAUTH_TOKEN" -- the
+// launchd job reads $KRANQ_HOME/env and nothing else.
+func claudeCheck(ctx context.Context, token string, daemonUp bool) doctor.Check {
+	if daemonUp {
+		if held, err := daemonHasClaude(ctx); err == nil {
+			switch {
+			case held:
+				return doctor.Check{Name: "claude token", Level: doctor.OK, Detail: "present, and the daemon has it"}
+			case token != "":
+				return doctor.Check{
+					Name: "claude token", Level: doctor.Warn, Fix: "kranq auth claude --stdin",
+					Detail: "in this shell but not in the daemon, which is what refuses a claude task",
+				}
+			}
+			return absentClaude()
 		}
+	}
+	if token == "" {
+		return absentClaude()
 	}
 	return doctor.Check{Name: "claude token", Level: doctor.OK, Detail: "present"}
 }
+
+func absentClaude() doctor.Check {
+	return doctor.Check{
+		Name: "claude token", Level: doctor.Warn, Fix: "kranq auth claude --stdin",
+		Detail: "absent, so tasks with a claude step will be refused",
+	}
+}
+
+func daemonHasClaude(ctx context.Context) (bool, error) {
+	client, code := connect(Env{Stdout: os.Stdout, Stderr: devNull{}}, false)
+	if code != exitcode.OK || client == nil {
+		return false, errNoDaemon
+	}
+	status, err := client.Status(ctx)
+	if err != nil {
+		return false, err
+	}
+	return status.Claude.Present, nil
+}
+
+var errNoDaemon = errors.New("no daemon")
 
 func daemonState(ctx context.Context) (version string, ownedVMs []string, reachable bool) {
 	client, code := connect(Env{Stdout: os.Stdout, Stderr: devNull{}}, false)

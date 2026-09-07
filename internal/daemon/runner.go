@@ -106,12 +106,26 @@ func (r *Runner) Run(ctx context.Context, t state.Task, script string, out *os.F
 func (r *Runner) execute(ctx context.Context, t state.Task, script string, out *os.File) (run.Result, error) {
 	var empty run.Result
 	remote := run.Remote{Base: r.RemoteBase, Repo: t.Repo, Token: run.ResolveToken(t.Env)}
-	if remote.Token == "" {
-		sock, err := sshagent.Ensure(r.AgentRoot)
-		if err != nil {
-			return empty, err
-		}
+	// The token and the agent are not alternatives. The token is for kranq's
+	// own clone of the project; the agent is for whatever the build itself
+	// reaches for, and a Gemfile with `git_source(:x) { "git@bitbucket.org:..." }`
+	// reaches for it during `bundle install`, inside an image layer, long
+	// before any task step runs.
+	//
+	// Making the agent conditional on the token being absent meant a pipeline
+	// that forwarded BITBUCKET_TOKEN got no agent at all. Measured: the layer
+	// failed with "fatal: repository ... does not exist" cloning a git-sourced
+	// gem, on a machine whose own key can read that repository. lima forwards
+	// the agent into the VM, so there was simply nothing to forward.
+	sock, agentErr := sshagent.Ensure(r.AgentRoot)
+	switch {
+	case agentErr == nil:
 		os.Setenv("SSH_AUTH_SOCK", sock)
+	case remote.Token == "":
+		// Nothing can reach the git host at all, and kranq has to clone.
+		return empty, agentErr
+	default:
+		fmt.Fprintf(out, "warning: no ssh agent (%v); anything the build fetches over ssh will fail\n", agentErr)
 	}
 
 	work, err := os.MkdirTemp("", "kranq-task-*")
