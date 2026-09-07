@@ -276,14 +276,22 @@ The bare repositories people push into, under `$KRANQ_HOME/repos`.
 
 ```sh
 kranq repo ls
-kranq repo create dx     # so a plain git push to its path works
+kranq repo create dx --host 142.127.69.2:333
 kranq repo rm dx         # the next push recreates it
 ```
 
-A push creates the repository on arrival unless
-`KRANQ_AUTO_CREATE_REPOS=false`. `create` is for that case, and for pushing
-straight to a repository's real path, where git runs the real `git-receive-pack`
-and no kranq code is in the loop to create anything.
+`create` prints the repository's URL, and that URL is all a client needs when
+its key already reaches the machine: pushing to a **real path** runs stock
+`git-receive-pack`, and the hooks inside the repository are kranq. No forced
+command, no `receivepack` override.
+
+That is also why `create` is needed at all on this path — nothing kranq owns
+runs before git does, so there is nothing to create the repository on arrival.
+A push to the short `ssh://host/dx.git` form does create it, unless
+`KRANQ_AUTO_CREATE_REPOS=false`.
+
+`--host [user@]host[:port]` is the address a client reaches the machine at; the
+same guess and the same warning as [`kranq setup`](#kranq-setup-name---peer-name).
 
 ### `kranq token create|ls|revoke`
 

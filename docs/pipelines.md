@@ -17,7 +17,27 @@ existed to stream logs and turn a result into an exit code; `git push` streams
 the hook's output already, and the exit code is a ref that is either there or
 not.
 
-## One command on the build machine
+## If the pipeline's key already reaches the machine
+
+Then it can already push. A repository given by its real path needs nothing
+intercepting the connection: stock `git-receive-pack` runs, and the hooks inside
+it are kranq. So there is no forced command, no `receivepack` override, and no
+new credential — the URL is the whole of it.
+
+```sh
+kranq repo create dx --host 142.127.69.2:333    # once, on the machine
+```
+
+Give the URL it prints to the pipeline as `KRANQ_URL`:
+
+```
+KRANQ_URL=ssh://macmini@142.127.69.2:333/~/.kranq/repos/dx.git
+```
+
+The repository is not created on demand this way, because nothing kranq owns
+runs before git does. `repo create` is that, once per project.
+
+## Or issue the pipeline its own key
 
 ```sh
 kranq setup ci-dx

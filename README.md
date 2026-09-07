@@ -26,7 +26,23 @@ The tap needs the URL because the repository is not named `homebrew-kranq`.
 
 ## Letting something push to it
 
-Name a key, and `setup` issues one and prints what the pusher needs:
+If the pusher's key already reaches the machine, it can already push: a
+repository given by its **real path** needs nothing intercepting the
+connection, because stock `git-receive-pack` runs and the hooks inside it are
+kranq. One command prints the URL.
+
+```sh
+kranq repo create dx --host 142.127.69.2:333
+#   git remote add kranq ssh://macmini@142.127.69.2:333/~/.kranq/repos/dx.git
+```
+
+That URL is the whole of the client's configuration — no forced command, no
+`receivepack` override, no new credential. The one thing it does not do is
+create the repository on demand, because nothing kranq owns runs before git
+does; `repo create` is that, once per project.
+
+To issue a confined credential instead — a key that can push and fetch and
+nothing else — name one:
 
 ```sh
 kranq setup ci-dx

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 	"os/user"
@@ -78,8 +79,16 @@ func repoList(env Env, args []string) int {
 // the ssh key they already administer the machine with. The forced command
 // creates one on first push; a plain push to a path cannot.
 func repoCreate(env Env, args []string) int {
-	if len(args) != 1 {
-		fmt.Fprintln(env.Stderr, "usage: kranq repo create <name>")
+	fs := flag.NewFlagSet("repo create", flag.ContinueOnError)
+	fs.SetOutput(env.Stderr)
+	host := fs.String("host", "", "address a client reaches this machine at, [user@]host[:port]")
+	port := fs.Int("port", 0, "the port, if it is not in --host")
+	rest, err := parsePermuted(fs, args)
+	if err != nil {
+		return exitcode.Usage
+	}
+	if len(rest) != 1 {
+		fmt.Fprintln(env.Stderr, "usage: kranq repo create <name> [--host ADDR]")
 		return exitcode.Usage
 	}
 	if err := selfinstall.EnsureHome(kranqHome()); err != nil {
@@ -87,16 +96,43 @@ func repoCreate(env Env, args []string) int {
 		return exitcode.InternalError
 	}
 	store := repoStore()
-	dir, err := store.Ensure(context.Background(), args[0])
+	dir, err := store.Ensure(context.Background(), rest[0])
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.Usage
 	}
 	fmt.Fprintf(env.Stdout, "%s\n", dir)
-	fmt.Fprintf(env.Stderr, "push to it with the key you already use:\n"+
-		"  git push ssh://%s@<this machine>%s -o task=<spec> HEAD:refs/heads/run\n",
-		currentUser(), dir)
+
+	// A repository given by its real path needs nothing intercepting the
+	// connection: stock git-receive-pack runs and the hooks in it are kranq.
+	// So any key that can already ssh here can push, with no forced command and
+	// no receive-pack override -- the URL is the whole of the setup.
+	where, guessed := resolveAddr(*host, *port)
+	fmt.Fprintf(env.Stderr, "\nAny key that can already ssh here can push to it, with nothing "+
+		"configured\non either side:\n\n")
+	fmt.Fprintf(env.Stderr, "  git remote add kranq ssh://%s@%s:%d/~/%s\n",
+		where.Login, where.Host, where.Port, homeRelative(dir))
+	fmt.Fprintln(env.Stderr, "  git push kranq HEAD:refs/heads/task/$RUN -o task_file=ci/tasks/spec.yaml")
+	fmt.Fprintln(env.Stderr, "  git pull --ff-only kranq task/$RUN")
+	fmt.Fprintln(env.Stderr, "  git fetch kranq ok/$RUN")
+	if guessed {
+		fmt.Fprintf(env.Stderr, "\nThe address is the one this machine was reached on. Pass the outside "+
+			"one\nif a client comes in through a forwarded port: --host addr:port\n")
+	}
 	return exitcode.OK
+}
+
+// The path is printed relative to the home directory so the URL survives a
+// machine whose home is somewhere else, and stays short enough to read.
+func homeRelative(dir string) string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return strings.TrimPrefix(dir, "/")
+	}
+	if rel, ok := strings.CutPrefix(dir, home+"/"); ok {
+		return rel
+	}
+	return strings.TrimPrefix(dir, "/")
 }
 
 func repoRemove(env Env, args []string) int {
