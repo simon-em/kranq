@@ -18,13 +18,13 @@ On the build machine:
 ```sh
 brew tap simon-em/kranq https://github.com/simon-em/kranq
 brew install simon-em/kranq/kranq
-kranq setup-git ci-dx --host 142.127.69.2:333 --repo dx
+kranq setup
 ```
 
 The tap needs the URL because the repository is not named `homebrew-kranq`.
-Lima is fetched and verified the first time a command needs a VM.
 
-`setup-git` authorises an ssh key and prints what the pipeline needs:
+`setup` installs lima, starts the daemon, authorises an ssh key, and prints
+what the pipeline needs:
 
 ```
 KRANQ_PEER=macmini@142.127.69.2:333
@@ -37,8 +37,20 @@ EOF
 
 `KRANQ_PEER` is the only one that must be set; the other two are for a caller
 with no ssh identity of its own. Variables go to stdout and everything else to
-stderr, so `kranq setup-git … > vars.env` is a file. The private key is printed
-once and kept nowhere — run it again to rotate.
+stderr, so `kranq setup > vars.env` is a file. The private key is printed once
+and kept nowhere — run it again to rotate.
+
+Nothing is pre-created: a repository comes into being on its first push.
+
+**A machine cannot see the address it is reached at**, so `setup` uses the one
+you arrived on and says so. When that is a forwarded port it will be wrong —
+pass the outside one with `--host 142.127.69.2:333`, or run it from a laptop,
+where the address is already known:
+
+```sh
+kranq peer add mini-1 --ssh macmini@142.127.69.2:333 --default
+kranq setup --peer mini-1
+```
 
 That key is a forced command: it can push and fetch and nothing else, and it is
 what lets the client be a plain URL with no git configuration.
@@ -92,8 +104,7 @@ kranq doctor        # can this machine run jobs at all
 From a laptop, against another build machine:
 
 ```sh
-kranq peer add mini-1 --ssh macmini@142.127.69.2:333 --default
-kranq peer upgrade mini-1
+kranq peer upgrade mini-1   # install or replace kranq there
 kranq peer test mini-1
 ```
 

@@ -10,7 +10,7 @@ Commands marked **internal** are run by git or by the daemon, never by hand.
 | [Running tasks](#running-tasks) | `run` `push` `ps` `logs` `fetch` `result` `cancel` `validate` `render` |
 | [Inspecting a machine](#inspecting-a-machine) | `status` `doctor` `vm` `image` |
 | [The daemon](#the-daemon) | `daemon` `config` `auth` |
-| [Receiving pushes](#receiving-pushes) | `setup-git` `repo` `token` `key` |
+| [Receiving pushes](#receiving-pushes) | `setup` `repo` `token` `key` |
 | [At-most-once effects](#at-most-once-effects) | `fence` |
 | [Installing and updating](#installing-and-updating) | `install` `upgrade` `rollback` `uninstall` `version` `help` |
 | [Other machines](#other-machines) | `peer` |
@@ -231,32 +231,40 @@ launchd plist: `~/Library/LaunchAgents` is world-readable.
 
 Setting up the machine other people push to. See [push.md](advanced/push.md).
 
-### `kranq setup-git [name]`
+### `kranq setup [name] [--peer NAME]`
 
-Run on the build machine. Authorises an ssh key and prints what a client needs,
-which is a URL and a key and nothing else.
+Makes a machine ready to receive work and authorises a key to send it: lima, the
+daemon, and an `authorized_keys` entry. Everything is optional and it is safe to
+re-run — doing so rotates the key.
 
 ```sh
-kranq setup-git ci-dx --host 142.127.69.2:333 --repo dx
+kranq setup                                  # on the build machine
+kranq setup --peer mini-1                    # from a laptop
+kranq setup ci-dx --host 142.127.69.2:333    # naming the key and the address
 ```
 
 | Flag | What |
 | --- | --- |
-| `--host [user@]host[:port]` | the address a client reaches this machine at |
+| `--peer NAME` | set up a registered build machine over ssh, sending it its own address |
+| `--host [user@]host[:port]` | the address a client reaches the machine at |
 | `--port N` | the port, if it is not in `--host` |
-| `--repo NAME` | create the repository now rather than on first push |
 | `--key FILE` | authorise this public key instead of generating one |
+| `--key-only` | just the key: leave lima and the daemon alone |
 
 Variables go to stdout, narration to stderr, so `> vars.env` is a file. The
-private key is printed once and kept nowhere; run it again to rotate.
+private key is printed once and kept nowhere.
+
+Nothing is pre-created: a repository comes into being on its first push, unless
+`KRANQ_AUTO_CREATE_REPOS` is off, in which case use `kranq repo create`.
 
 The key is installed as a forced command, so it can push and fetch and do
 nothing else — no shell, no agent forwarding, no port forwarding. That is also
 what removes the client-side `receivepack` and `uploadpack` overrides: ssh puts
 what git asked for in `SSH_ORIGINAL_COMMAND` and kranq resolves the repository.
 
-**The port cannot be discovered here.** A machine reached through a forwarded
-port sees only its own, so `setup-git` reads sshd's and says that it guessed.
+**The address cannot be discovered here.** A machine reached through a forwarded
+port sees only what sshd is bound to, so `setup` uses the address you arrived on
+and says that it guessed. `--peer` avoids the question: the registry holds it.
 
 ### `kranq repo ls|create|rm`
 

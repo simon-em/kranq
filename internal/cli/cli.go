@@ -51,7 +51,7 @@ func init() {
 		"token":       {"token create|ls|revoke", "named tokens for the git push endpoint", runToken},
 		"key":         {"key add|ls|rm", "ssh keys allowed to push to this machine", runKey},
 		"repo":        {"repo ls|create|rm", "the repositories people push here", runRepo},
-		"setup-git":   {"setup-git [name]", "authorise a key so a client needs no git config", runSetupGit},
+		"setup":       {"setup [name] [--peer NAME]", "make a machine ready and authorise a key for it", runSetup},
 		"git-receive": {"git-receive", "the ssh entry point (run by sshd, not by hand)", runGitReceive},
 		"git-hook":    {"git-hook <phase>", "run a receive hook (invoked by git, not by hand)", runGitHook},
 		"push":        {"push <task.yaml> [flags]", "send this repo to kranq and run a task against it", runPush},
@@ -88,7 +88,7 @@ func dispatch(env Env, args []string) int {
 // entry points git and sshd call, or things you reach for once a year; they
 // all still work and `kranq help <name>` still documents them.
 var primary = []string{
-	"install", "setup-git",
+	"setup",
 	"status", "ps", "logs", "doctor",
 	"peer",
 	"version", "help",

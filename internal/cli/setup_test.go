@@ -85,3 +85,46 @@ func TestThePeerAddressNamesTheAccount(t *testing.T) {
 		t.Errorf("vars = %q, want a peer with the account in it", out.String())
 	}
 }
+
+// Everything is optional, so the no-argument form has to produce a usable
+// address. SSH_CONNECTION names one somebody genuinely reached this machine on,
+// which beats a hostname that may resolve nowhere.
+func TestTheAddressFallsBackToHowYouGotHere(t *testing.T) {
+	t.Setenv("SSH_CONNECTION", "142.127.168.209 30743 192.168.2.55 22")
+	got, guessed := resolveAddr("", 0)
+	if got.Host != "192.168.2.55" || got.Port != 22 {
+		t.Errorf("addr = %+v, want the server side of SSH_CONNECTION", got)
+	}
+	if !guessed {
+		t.Error("the address was not flagged as a guess; a forwarded port would be printed as fact")
+	}
+	// The client's half is somebody else's address entirely.
+	if got.Host == "142.127.168.209" {
+		t.Error("the client address was used as the server's")
+	}
+}
+
+func TestAGivenAddressIsNeverOverriddenByTheConnection(t *testing.T) {
+	t.Setenv("SSH_CONNECTION", "1.2.3.4 5 192.168.2.55 22")
+	got, guessed := resolveAddr("macmini@142.127.69.2:333", 0)
+	if got != (addr{"macmini", "142.127.69.2", 333}) {
+		t.Errorf("addr = %+v, want what was asked for", got)
+	}
+	if guessed {
+		t.Error("an address given in full was reported as a guess")
+	}
+}
+
+// The point of --peer: the registry already holds the address, so there is
+// nothing to type and nothing to get wrong.
+func TestSettingUpAPeerSendsItsOwnAddress(t *testing.T) {
+	got := peerSetupCommand("~/.local/bin/kranq", "macmini@142.127.69.2:333", "ci-dx", false)
+	// A leading ~ is expanded by the remote shell, not quoted away.
+	want := `"$HOME/.local/bin/kranq" setup 'ci-dx' --host 'macmini@142.127.69.2:333'`
+	if got != want {
+		t.Errorf("remote command =\n  %s\nwant\n  %s", got, want)
+	}
+	if !strings.HasSuffix(peerSetupCommand("~/.local/bin/kranq", "h", "ci", true), " --key-only") {
+		t.Error("--key-only did not reach the far side")
+	}
+}

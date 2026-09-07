@@ -20,10 +20,11 @@ not.
 ## One command on the build machine
 
 ```sh
-kranq setup-git ci-dx --host 142.127.69.2:333 --repo dx
+kranq setup
 ```
 
-It authorises a key and prints what the pipeline needs:
+It installs lima, starts the daemon, authorises a key, and prints what the
+pipeline needs:
 
 ```
 KRANQ_PEER=macmini@142.127.69.2:333
@@ -38,6 +39,17 @@ EOF
 with no ssh identity of its own; a pipeline that forwards an agent reaching the
 machine needs neither. Set `KRANQ_SSH_KEY` secured.
 
+Nothing is pre-created: a repository comes into being on its first push.
+
+**The address is the one thing it cannot work out.** A machine behind a
+forwarded port sees only the port sshd is bound to, so `setup` uses the address
+you arrived on and says that it guessed. Pass `--host 142.127.69.2:333`, or run
+it from a laptop, where the peer registry already holds it:
+
+```sh
+kranq setup --peer mini-1
+```
+
 **Why there is no `receivepack` to configure.** The key is installed as a forced
 command, so ssh runs kranq rather than what git asked for and passes the request
 in `SSH_ORIGINAL_COMMAND`. kranq resolves the repository from that, which is the
@@ -48,10 +60,6 @@ shell:
 $ ssh -i ci-dx macmini@142.127.69.2 -p 333 id
 kranq: "id" is not a git command
 ```
-
-**The port cannot be discovered from the machine.** The mini answers on 333,
-which is a router forwarding to 22, so sshd sees only 22. `setup-git` reads
-sshd's port, says that it guessed, and takes the real one from `--host`.
 
 ## Getting the results back
 
@@ -102,7 +110,7 @@ would ask it for `git-receive-pack '/dx.git'` and that is not a path there. Set
 `KRANQ_REMOTE_BIN` to where kranq lives and `kranq-setup` names it as the
 remote's receive-pack and upload-pack instead.
 
-Do not set it for a `setup-git` key. Measured: a fetch with
+Do not set it for a `setup` key. Measured: a fetch with
 `remote.kranq.uploadpack` set on such a key fails with *the repository argument
 is not quoted as git quotes it*, because `--upload` arrives inside
 `SSH_ORIGINAL_COMMAND` and lands in the repository argument.
