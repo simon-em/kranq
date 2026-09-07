@@ -88,7 +88,7 @@ type Engine struct {
 
 func (e *Engine) Execute(ctx context.Context, req Request, out io.Writer) (res Result, err error) {
 
-	proj, err := project.Load(req.Checkout, req.Kranqfile)
+	proj, err := project.Load(req.Checkout, req.Kranqfile, req.Env)
 	if err != nil {
 		return res, err
 	}

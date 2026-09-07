@@ -3,6 +3,7 @@ package project
 import (
 	"bufio"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -130,4 +131,23 @@ func parseEnv(args string) ([]EnvVar, error) {
 		out = append(out, EnvVar{Name: name, Value: value})
 	}
 	return out, nil
+}
+
+var argName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// ARG NAME, ARG NAME=default, SECRET NAME. One name per instruction, unlike
+// ENV: a list would make it ambiguous which of them the default belonged to.
+func parseArg(args string) (name, value string, err error) {
+	parts := fields(args)
+	switch {
+	case len(parts) == 0:
+		return "", "", fmt.Errorf("needs a name")
+	case len(parts) > 1:
+		return "", "", fmt.Errorf("takes one name, not %d; repeat the instruction", len(parts))
+	}
+	name, value, _ = strings.Cut(parts[0], "=")
+	if !argName.MatchString(name) {
+		return "", "", fmt.Errorf("%q is not a usable variable name", name)
+	}
+	return name, value, nil
 }

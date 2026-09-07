@@ -16,6 +16,18 @@ import (
 	"github.com/simon-em/kranq/internal/task"
 )
 
+// An ARG is looked up in whoever is running this, so `kranq validate` from a
+// shell that has the values reports the same layer names a build would.
+func processEnv() map[string]string {
+	out := map[string]string{}
+	for _, kv := range os.Environ() {
+		if name, value, ok := strings.Cut(kv, "="); ok {
+			out[name] = value
+		}
+	}
+	return out
+}
+
 func runValidate(env Env, args []string) int {
 	if len(args) == 0 {
 		fmt.Fprintln(env.Stderr, "usage: kranq validate <task.yaml|Kranqfile>...")
@@ -78,7 +90,7 @@ func validateBuild(env Env, path string) int {
 		fmt.Fprintf(env.Stderr, "%s: run kranq validate from the repository root\n", path)
 		return exitcode.Usage
 	}
-	p, err := project.Load(root, rel)
+	p, err := project.Load(root, rel, processEnv())
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "%s: %v\n", path, err)
 		return exitcode.InvalidSpec

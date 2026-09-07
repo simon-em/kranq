@@ -37,7 +37,7 @@ func load(t *testing.T, files map[string]string) project.Project {
 			t.Fatal(err)
 		}
 	}
-	p, err := project.Load(dir, "")
+	p, err := project.Load(dir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -213,7 +213,11 @@ func (m *Manager) applyLayer(ctx context.Context, name string, l project.Resolve
 	if strings.TrimSpace(l.Run) == "" {
 		return nil
 	}
-	script := fmt.Sprintf("set -euo pipefail\ncd %s\n%s%s\n", shellQuote(workdir), exports(l.Env), l.Run)
+	// Secrets last, so a Kranqfile cannot shadow one with an ENV of the same
+	// name and read it back. Nothing here is echoed: there is no set -x, and
+	// the script is handed to the shell rather than written into the image.
+	script := fmt.Sprintf("set -euo pipefail\ncd %s\n%s%s%s%s\n",
+		shellQuote(workdir), exports(l.Env), exports(l.Values), exports(l.Private), l.Run)
 	return m.shell(ctx, name, l.Summary(), script, out)
 }
 

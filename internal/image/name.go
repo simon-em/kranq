@@ -63,6 +63,18 @@ func LayerName(parent string, l project.Resolved, depth int) string {
 	for _, e := range l.Env {
 		fmt.Fprintf(h, "env\x00%s\x00%s\x00", e.Name, e.Value)
 	}
+	// An arg's value is part of what the layer is: two builds that differ by
+	// one are two layers, which is what makes ARG safe to have at all.
+	for _, a := range l.Values {
+		fmt.Fprintf(h, "arg\x00%s\x00%s\x00", a.Name, a.Value)
+	}
+	// A secret's *name* only. The value is not what makes the layer different
+	// -- the same gems come back whoever fetched them -- and hashing it would
+	// rebuild every layer the day the credential is rotated. The name still
+	// counts, because a RUN that can suddenly see one may do something else.
+	for _, name := range l.Secrets {
+		fmt.Fprintf(h, "secret\x00%s\x00", name)
+	}
 	fmt.Fprintf(h, "run\x00%s\x00", l.Run)
 	for _, f := range l.Files {
 		fmt.Fprintf(h, "file\x00%s\x00%o\x00%s\x00", f.Dest, f.Mode, f.Digest)

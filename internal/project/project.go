@@ -33,6 +33,13 @@ type EnvVar struct {
 	Value string
 }
 
+// Arg is a value the caller supplies and the layer's identity includes, so two
+// builds that differ by one are two layers rather than a collision.
+type Arg struct {
+	Name    string
+	Default string
+}
+
 type Copy struct {
 	Sources []string
 	Dest    string
@@ -45,6 +52,8 @@ type Layer struct {
 	Copies  []Copy
 	Workdir string
 	Env     []EnvVar
+	Args    []Arg
+	Secrets []string
 	Run     string
 	Line    int
 }
@@ -62,6 +71,11 @@ type Resolved struct {
 	Layer
 	Files []File
 	Roots []string
+	// Values are the args as the caller supplied them, which is what the hash
+	// sees. Secrets are resolved the same way and deliberately kept apart: they
+	// reach the RUN and reach nothing else.
+	Values  []EnvVar
+	Private []EnvVar
 }
 
 type Project struct {
@@ -105,7 +119,11 @@ func shorten(s string) string {
 	return s[:41] + "..."
 }
 
-func Load(checkout, file string) (Project, error) {
+// Load takes the caller's environment because a build sees what it declares
+// and nothing else: an ARG or a SECRET names a value, and only a declared name
+// is looked up. Forwarding the lot would put BITBUCKET_COMMIT in every layer's
+// hash and rebuild the image on every push.
+func Load(checkout, file string, env map[string]string) (Project, error) {
 	if file == "" {
 		file = DefaultFile
 	}
@@ -128,6 +146,9 @@ func Load(checkout, file string) (Project, error) {
 	if err != nil {
 		return p, fmt.Errorf("%s: %w", file, err)
 	}
+	if err := bind(p.Layers, env, file); err != nil {
+		return p, err
+	}
 	return p, nil
 }
 
@@ -138,6 +159,34 @@ func (b Build) validate(file string) error {
 		}
 		if _, err := task.ParseMemory(pair.value); err != nil {
 			return fmt.Errorf("%s: %s: %w", file, pair.field, err)
+		}
+	}
+	return nil
+}
+
+// An ARG with no value anywhere is a build that would run differently from the
+// one whose name it shares, so it is refused rather than resolved to empty. A
+// SECRET is allowed to be absent: a machine may legitimately have no credential
+// and the RUN is what decides whether it needed one.
+func bind(layers []Resolved, env map[string]string, file string) error {
+	for i := range layers {
+		l := &layers[i]
+		for _, a := range l.Args {
+			value, ok := env[a.Name]
+			switch {
+			case ok && value != "":
+			case a.Default != "":
+				value = a.Default
+			default:
+				return fmt.Errorf("%s:%d: ARG %s has no value and no default; "+
+					"forward it with -o env.%s=...", file, l.Line, a.Name, a.Name)
+			}
+			l.Values = append(l.Values, EnvVar{Name: a.Name, Value: value})
+		}
+		for _, name := range l.Secrets {
+			if value := env[name]; value != "" {
+				l.Private = append(l.Private, EnvVar{Name: name, Value: value})
+			}
 		}
 	}
 	return nil

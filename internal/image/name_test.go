@@ -242,3 +242,53 @@ func TestARunNameSurvivesAMissingPart(t *testing.T) {
 		}
 	}
 }
+
+// An arg's value makes the layer, so two builds that differ by one are two
+// layers rather than a collision -- which is the objection that kept ARG out.
+func TestAnArgValueChangesTheLayerName(t *testing.T) {
+	base := project.Resolved{Layer: project.Layer{Run: "bundle install"}}
+	with := func(name, value string) string {
+		l := base
+		l.Values = []project.EnvVar{{Name: name, Value: value}}
+		return LayerName("parent", l, 1)
+	}
+	if with("RUBY", "3.4.1") == with("RUBY", "3.5.0") {
+		t.Error("two arg values produced one layer; the builds would collide")
+	}
+	if with("RUBY", "3.4.1") == LayerName("parent", base, 1) {
+		t.Error("declaring an arg did not change the layer at all")
+	}
+	if with("RUBY", "3.4.1") != with("RUBY", "3.4.1") {
+		t.Error("the same arg produced two layers")
+	}
+}
+
+// A secret's value must not. The same gems come back whoever fetched them, and
+// hashing the credential would rebuild every layer the day it is rotated --
+// which is the reason a secret is not just an arg.
+func TestASecretValueDoesNotChangeTheLayerName(t *testing.T) {
+	l := project.Resolved{Layer: project.Layer{Run: "bundle install", Secrets: []string{"TOKEN"}}}
+	before := l
+	before.Private = []project.EnvVar{{Name: "TOKEN", Value: "old-token"}}
+	after := l
+	after.Private = []project.EnvVar{{Name: "TOKEN", Value: "rotated-token"}}
+
+	if LayerName("parent", before, 1) != LayerName("parent", after, 1) {
+		t.Error("rotating a secret renamed the layer, so every image would rebuild")
+	}
+	// The name still counts: a RUN that can suddenly see a token may do
+	// something else, and that is a different layer.
+	bare := project.Resolved{Layer: project.Layer{Run: "bundle install"}}
+	if LayerName("parent", before, 1) == LayerName("parent", bare, 1) {
+		t.Error("declaring a secret did not change the layer")
+	}
+}
+
+// The value must not reach the name by any route, including as a substring.
+func TestASecretValueIsNowhereInTheName(t *testing.T) {
+	l := project.Resolved{Layer: project.Layer{Run: "true", Secrets: []string{"TOKEN"}}}
+	l.Private = []project.EnvVar{{Name: "TOKEN", Value: "deadbeefdeadbeef"}}
+	if strings.Contains(LayerName("parent", l, 1), "deadbeef") {
+		t.Error("the secret leaked into the layer name")
+	}
+}

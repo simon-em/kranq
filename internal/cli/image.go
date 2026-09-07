@@ -139,7 +139,7 @@ func imageBuild(env Env, args []string) int {
 		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.CouldNotStart
 	}
-	proj, err := project.Load(checkout, *kranqfile)
+	proj, err := project.Load(checkout, *kranqfile, processEnv())
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "kranq: %v\n", err)
 		return exitcode.InvalidSpec

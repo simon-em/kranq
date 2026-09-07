@@ -21,6 +21,51 @@ There is no `FROM`: every Kranqfile starts from kranq's own base image, and
 there is nothing to choose. There is no `CMD` or `ENTRYPOINT` either — a layer
 is an environment, not a service, and what runs in it is the task.
 
+
+## Values the build takes from the caller
+
+A build sees nothing it has not asked for. Forwarding the caller's whole
+environment would put `BITBUCKET_COMMIT` in every layer's hash and rebuild the
+image on every push, so a Kranqfile names the few values it actually needs.
+
+```
+ARG RUBY_VERSION=3.4.1     # part of the layer's identity
+SECRET BITBUCKET_TOKEN     # available to RUN, and hashed by name only
+```
+
+Both are read from what the caller forwards — the task environment, so
+`-o env.NAME=` or `KRANQ_FORWARD_ENV` — and both are exported to every `RUN` at
+or after the declaration.
+
+| | in the hash | absent is | for |
+| --- | --- | --- | --- |
+| `ARG` | name **and value** | an error, unless it has a default | something that changes what gets built |
+| `SECRET` | name only | fine; the `RUN` decides | a credential the build needs to fetch something |
+
+**Why the split.** An arg's value makes the layer: two builds that differ by one
+are two layers rather than a collision, which is what makes `ARG` safe to have
+at all. A credential is the opposite — `bundle install` produces the same gems
+whoever fetched them, so hashing the token would rebuild every image the day it
+is rotated. Measured against the build machine:
+
+```
+BUILD_TOKEN=secret-one     -> building kranq-layer-01-78ff2ec32c65
+BUILD_TOKEN=rotated        -> cached as kranq-layer-01-78ff2ec32c65
+TOOL_VERSION=9.9           -> building kranq-layer-01-0ddce511ba3a
+TOOL_VERSION back to 2.0   -> cached as kranq-layer-01-78ff2ec32c65
+```
+
+A secret's *name* is hashed, because a `RUN` that can suddenly see a token may
+do something else, and that is a different layer.
+
+**What a secret does not do.** It keeps the credential out of the layer's name
+and out of its stored environment; it cannot keep it out of whatever the `RUN`
+does with it. A `RUN` that echoes one puts it in the build log, and a layer
+built with one still contains what it fetched — and that layer is shared with
+any project whose steps hash the same. On a machine serving one team that is
+the intent; it is not an access boundary.
+
+
 ## RUN is the layer boundary
 
 Each `RUN` produces a real, stopped VM image. `COPY`, `ENV` and `WORKDIR` stage
@@ -122,6 +167,8 @@ key. A file that matters to the build is in the build.
 | `COPY <src>… <dest>` | from the repository root into the image |
 | `WORKDIR <abs path>` | for every instruction after it; defaults to `/kranq/build` |
 | `ENV NAME=VALUE …` | exported for every `RUN` after it, in order |
+| `ARG NAME[=default]` | a value from the caller, part of the layer's identity |
+| `SECRET NAME` | a credential from the caller, hashed by name only |
 | `MEMORY`, `CPUS`, `DISK` | how big the VM is. Dockerfiles have no equivalent; VMs need one. |
 
 Comments are `#`, and a trailing `\` continues a line.
@@ -142,7 +189,7 @@ EOF
 ```
 
 Instructions a Dockerfile has and a Kranqfile refuses — `FROM`, `CMD`,
-`ENTRYPOINT`, `ADD`, `EXPOSE`, `USER`, `ARG`, `VOLUME`, `LABEL`, `HEALTHCHECK`,
+`ENTRYPOINT`, `ADD`, `EXPOSE`, `USER`, `VOLUME`, `LABEL`, `HEALTHCHECK`,
 `ONBUILD`, `SHELL`, `STOPSIGNAL` — each fail by name with what kranq does
 instead, because what someone pastes a Dockerfile in for is usually one of them.
 

@@ -25,7 +25,6 @@ var refused = map[string]string{
 	"VOLUME":      "a layer is a whole disk; there is nothing to mount",
 	"USER":        "every RUN is the build user, which has passwordless sudo",
 	"ADD":         "use COPY; ADD also unpacks archives and fetches URLs, which hides what a layer contains",
-	"ARG":         "a build argument would not be part of the layer's identity, so two different builds would collide",
 	"LABEL":       "nothing reads labels",
 	"HEALTHCHECK": "nothing runs a health check",
 	"ONBUILD":     "there is nothing to trigger it",
@@ -96,6 +95,8 @@ func (b *Build) apply(pending *Layer, in instruction, file string) error {
 			Copies:  pending.Copies,
 			Workdir: pending.Workdir,
 			Env:     append([]EnvVar(nil), pending.Env...),
+			Args:    append([]Arg(nil), pending.Args...),
+			Secrets: append([]string(nil), pending.Secrets...),
 			Run:     script,
 			Line:    in.line,
 		}
@@ -130,6 +131,34 @@ func (b *Build) apply(pending *Layer, in instruction, file string) error {
 			return fmt.Errorf("%s:%d: %w", file, in.line, err)
 		}
 		pending.Env = append(pending.Env, vars...)
+		return nil
+
+	// A build sees nothing it has not asked for. Forwarding the caller's whole
+	// environment would put BITBUCKET_COMMIT in the hash and rebuild every
+	// layer on every push, so a Kranqfile names the few values it actually
+	// builds differently for.
+	case "ARG":
+		name, value, err := parseArg(in.args)
+		if err != nil {
+			return fmt.Errorf("%s:%d: %w", file, in.line, err)
+		}
+		pending.Args = append(pending.Args, Arg{Name: name, Default: value})
+		return nil
+
+	// Same channel, opposite hashing. A credential is not what makes a layer
+	// different -- `bundle install` produces the same gems whoever fetched
+	// them -- so hashing one would rebuild everything the day it is rotated.
+	// The name is hashed, because a RUN that can suddenly see a token may do
+	// something else; the value never is, and is never written down.
+	case "SECRET":
+		name, value, err := parseArg(in.args)
+		if err != nil {
+			return fmt.Errorf("%s:%d: %w", file, in.line, err)
+		}
+		if value != "" {
+			return fmt.Errorf("%s:%d: SECRET %s cannot have a default; a secret in the Kranqfile is not a secret", file, in.line, name)
+		}
+		pending.Secrets = append(pending.Secrets, name)
 		return nil
 
 	case "MEMORY", "DISK", "CPUS":

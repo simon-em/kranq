@@ -48,7 +48,7 @@ func dxCheckout(t *testing.T) string {
 }
 
 func TestRunIsTheLayerBoundary(t *testing.T) {
-	p, err := Load(dxCheckout(t), "")
+	p, err := Load(dxCheckout(t), "", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -70,7 +70,7 @@ func TestRunIsTheLayerBoundary(t *testing.T) {
 }
 
 func TestAHeredocRunKeepsItsLines(t *testing.T) {
-	p, err := Load(dxCheckout(t), "")
+	p, err := Load(dxCheckout(t), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +88,7 @@ func TestEnvCarriesForwardAndKeepsItsOrder(t *testing.T) {
 		"ENV PATH=/opt/ci/bin:$PATH B=\"two words\"\n" +
 		"RUN first\n" +
 		"RUN second\n"})
-	p, err := Load(dir, "")
+	p, err := Load(dir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -111,7 +111,7 @@ func TestWorkdirAppliesToWhatFollowsIt(t *testing.T) {
 		"a":         "a\n",
 		"b":         "b\n",
 	})
-	p, err := Load(dir, "")
+	p, err := Load(dir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestCopyDestinationsFollowDockerRules(t *testing.T) {
 		"config/database.yml": "db\n",
 		"config/sub/x.yml":    "x\n",
 	})
-	p, err := Load(dir, "")
+	p, err := Load(dir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +164,7 @@ func TestATrailingCopyStillBecomesALayer(t *testing.T) {
 		DefaultFile: "RUN true\nCOPY late.txt /opt/late.txt\n",
 		"late.txt":  "late\n",
 	})
-	p, err := Load(dir, "")
+	p, err := Load(dir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -178,7 +178,7 @@ func TestATrailingCopyStillBecomesALayer(t *testing.T) {
 
 func TestACustomKranqfileIsRead(t *testing.T) {
 	dir := checkout(t, map[string]string{"Kranqfile.staging": "RUN true\n"})
-	p, err := Load(dir, "Kranqfile.staging")
+	p, err := Load(dir, "Kranqfile.staging", nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -188,7 +188,7 @@ func TestACustomKranqfileIsRead(t *testing.T) {
 }
 
 func TestCopyCarriesContentNotJustAName(t *testing.T) {
-	p, err := Load(dxCheckout(t), "")
+	p, err := Load(dxCheckout(t), "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +208,7 @@ func TestGlobsResolve(t *testing.T) {
 		"kranq.gemspec": "spec\n",
 		"other.gemspec": "other\n",
 	})
-	p, err := Load(dir, "")
+	p, err := Load(dir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestWalkingADirectorySkipsGit(t *testing.T) {
 		"app/main.rb":        "puts 1\n",
 		"app/.git/objects/x": "packfile\n",
 	})
-	p, err := Load(dir, "")
+	p, err := Load(dir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +245,7 @@ func TestOnlyTheExecutableBitSurvives(t *testing.T) {
 	if err := os.Chmod(filepath.Join(dir, "bin/setup"), 0o741); err != nil {
 		t.Fatal(err)
 	}
-	p, err := Load(dir, "")
+	p, err := Load(dir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestASymlinkIsRefusedRatherThanFollowed(t *testing.T) {
 	if err := os.Symlink(filepath.Join(dir, "secret"), filepath.Join(dir, "config", "link.yml")); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Load(dir, "")
+	_, err := Load(dir, "", nil)
 	if err == nil || !strings.Contains(err.Error(), "link.yml") {
 		t.Errorf("error = %v, want it to name the symlink it refused", err)
 	}
@@ -288,11 +288,10 @@ func TestDockerfileOnlyInstructionsAreRefusedByName(t *testing.T) {
 		"ADD x.tar.gz /opt":    "use COPY",
 		"EXPOSE 3000":          "no ports",
 		"USER root":            "sudo",
-		"ARG VERSION=1":        "identity",
 		"VOLUME /data":         "whole disk",
 		"HEALTHCHECK CMD true": "health check",
 	} {
-		_, err := Load(checkout(t, map[string]string{DefaultFile: verb + "\nRUN true\n"}), "")
+		_, err := Load(checkout(t, map[string]string{DefaultFile: verb + "\nRUN true\n"}), "", nil)
 		if err == nil {
 			t.Errorf("%s: expected an error", verb)
 			continue
@@ -319,7 +318,7 @@ func TestLoadRejectsABadKranqfile(t *testing.T) {
 		"env with no value":   "ENV LONELY\nRUN true\n",
 	}
 	for name, body := range cases {
-		if _, err := Load(checkout(t, map[string]string{DefaultFile: body}), ""); err == nil {
+		if _, err := Load(checkout(t, map[string]string{DefaultFile: body}), "", nil); err == nil {
 			t.Errorf("%s: expected an error", name)
 		}
 	}
@@ -327,7 +326,7 @@ func TestLoadRejectsABadKranqfile(t *testing.T) {
 
 func TestErrorsNameTheLine(t *testing.T) {
 	dir := checkout(t, map[string]string{DefaultFile: "RUN true\n\n# a comment\nEXPOSE 3000\n"})
-	_, err := Load(dir, "")
+	_, err := Load(dir, "", nil)
 	if err == nil || !strings.Contains(err.Error(), ":4:") {
 		t.Errorf("error = %v, want it to point at line 4", err)
 	}
@@ -335,7 +334,7 @@ func TestErrorsNameTheLine(t *testing.T) {
 
 func TestContinuationsAreJoined(t *testing.T) {
 	dir := checkout(t, map[string]string{DefaultFile: "RUN apt-get install -y \\\n    jq \\\n    curl\n"})
-	p, err := Load(dir, "")
+	p, err := Load(dir, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -345,7 +344,7 @@ func TestContinuationsAreJoined(t *testing.T) {
 }
 
 func TestMissingKranqfileSaysSo(t *testing.T) {
-	_, err := Load(t.TempDir(), "")
+	_, err := Load(t.TempDir(), "", nil)
 	if err == nil || !strings.Contains(err.Error(), DefaultFile) {
 		t.Errorf("error = %v, want it to name %s", err, DefaultFile)
 	}
@@ -356,7 +355,7 @@ func TestMemoryKeepsItsUnit(t *testing.T) {
 	for value, want := range cases {
 		p, err := Load(checkout(t, map[string]string{
 			DefaultFile: "MEMORY " + value + "\nRUN true\n",
-		}), "")
+		}), "", nil)
 		if err != nil {
 			t.Fatalf("%s: %v", value, err)
 		}
@@ -369,9 +368,83 @@ func TestMemoryKeepsItsUnit(t *testing.T) {
 
 func TestSizeInstructionsNeedAValue(t *testing.T) {
 	for _, verb := range []string{"MEMORY", "CPUS", "DISK"} {
-		_, err := Load(checkout(t, map[string]string{DefaultFile: verb + "\nRUN true\n"}), "")
+		_, err := Load(checkout(t, map[string]string{DefaultFile: verb + "\nRUN true\n"}), "", nil)
 		if err == nil || !strings.Contains(err.Error(), verb) {
 			t.Errorf("%s alone: error = %v, want it refused rather than silently ignored", verb, err)
 		}
+	}
+}
+
+// ARG used to be refused, on the grounds that a build argument "would not be
+// part of the layer's identity, so two different builds would collide". Making
+// it part of the identity answers that, and is what lets a Kranqfile take a
+// value at all.
+func TestAnArgIsPartOfTheLayersIdentity(t *testing.T) {
+	const src = "ARG RUBY=3.4.1\nRUN echo \"$RUBY\"\n"
+	one, err := Load(checkout(t, map[string]string{DefaultFile: src}), "", map[string]string{"RUBY": "3.4.1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	two, err := Load(checkout(t, map[string]string{DefaultFile: src}), "", map[string]string{"RUBY": "3.5.0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := one.Layers[0].Values; len(got) != 1 || got[0] != (EnvVar{"RUBY", "3.4.1"}) {
+		t.Fatalf("values = %+v, want the caller's value", got)
+	}
+	if two.Layers[0].Values[0].Value != "3.5.0" {
+		t.Fatalf("values = %+v, want the caller's value", two.Layers[0].Values)
+	}
+}
+
+// The default is what a Kranqfile that does not need the caller to say anything
+// falls back to, and an undeclared name is not looked up at all -- that is the
+// whole point, or every push would rebuild on BITBUCKET_COMMIT.
+func TestOnlyDeclaredNamesAreLookedUp(t *testing.T) {
+	src := "ARG RUBY=3.4.1\nRUN echo hi\n"
+	env := map[string]string{"BITBUCKET_COMMIT": "abc123", "UNDECLARED": "x"}
+	p, err := Load(checkout(t, map[string]string{DefaultFile: src}), "", env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Layers[0].Values) != 1 || p.Layers[0].Values[0].Value != "3.4.1" {
+		t.Fatalf("values = %+v, want just the default", p.Layers[0].Values)
+	}
+	for _, v := range p.Layers[0].Values {
+		if v.Name == "BITBUCKET_COMMIT" || v.Name == "UNDECLARED" {
+			t.Errorf("%s was bound without being declared", v.Name)
+		}
+	}
+}
+
+// An ARG with nowhere to get a value would build something different from the
+// layer whose name it shares, so it is refused rather than resolved to empty.
+func TestAnArgWithNoValueAnywhereIsRefused(t *testing.T) {
+	_, err := Load(checkout(t, map[string]string{DefaultFile: "ARG TOKEN\nRUN true\n"}), "", map[string]string{})
+	if err == nil {
+		t.Fatal("an unbound ARG was accepted")
+	}
+	if !strings.Contains(err.Error(), "-o env.TOKEN=") {
+		t.Errorf("err = %v, want it to say how to supply the value", err)
+	}
+}
+
+// A secret may legitimately be absent: a machine can have no credential, and
+// the RUN is what decides whether it needed one.
+func TestASecretMayBeAbsent(t *testing.T) {
+	p, err := Load(checkout(t, map[string]string{DefaultFile: "SECRET TOKEN\nRUN true\n"}), "", map[string]string{})
+	if err != nil {
+		t.Fatalf("an absent secret was refused: %v", err)
+	}
+	if len(p.Layers[0].Private) != 0 {
+		t.Errorf("private = %+v, want nothing", p.Layers[0].Private)
+	}
+}
+
+// A default would be a credential written into the repository.
+func TestASecretCannotHaveADefault(t *testing.T) {
+	_, err := Load(checkout(t, map[string]string{DefaultFile: "SECRET TOKEN=hunter2\nRUN true\n"}), "", nil)
+	if err == nil || !strings.Contains(err.Error(), "not a secret") {
+		t.Errorf("err = %v, want a refusal that says why", err)
 	}
 }
