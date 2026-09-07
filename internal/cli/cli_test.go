@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -56,8 +57,16 @@ func TestHelpGoesToStdoutAndSucceeds(t *testing.T) {
 	if code != exitcode.OK {
 		t.Errorf("exit = %d, want 0", code)
 	}
-	if !strings.Contains(out, "validate") {
+	if !strings.Contains(out, "doctor") {
 		t.Errorf("help did not list the commands:\n%s", out)
+	}
+	// validate is one of the rest now, so the short help points at where it is.
+	if strings.Contains(out, "validate") {
+		t.Errorf("the base help is not the short list:\n%s", out)
+	}
+	code, all, _ := invoke(t, "help", "--all")
+	if code != exitcode.OK || !strings.Contains(all, "validate") {
+		t.Errorf("help --all exit=%d, did not list everything:\n%s", code, all)
 	}
 }
 
@@ -369,5 +378,50 @@ func TestDepsOnlyInstallLeavesTheBinaryAlone(t *testing.T) {
 	}
 	if body, err := os.ReadFile(profile); err == nil && strings.Contains(string(body), "kranq") {
 		t.Fatalf("--deps-only edited a shell profile:\n%s", body)
+	}
+}
+
+// The short help is a hand-written list, so a rename somewhere else drops a
+// command out of it silently. This is what notices.
+func TestEveryCommandInTheShortHelpExists(t *testing.T) {
+	for _, name := range primary {
+		if _, ok := commands[name]; !ok {
+			t.Errorf("the base help lists %q, which is not a command", name)
+		}
+	}
+}
+
+// Hiding a command from the list must not hide it from help or from being run.
+func TestTheHiddenCommandsAreStillReachable(t *testing.T) {
+	var short, all strings.Builder
+	usage(&short)
+	usageAll(&all)
+
+	for _, name := range []string{"run", "push", "fetch", "auth", "image", "token", "key"} {
+		// Against the list rather than the rendered text: "run" and "key" both
+		// appear in other commands' summaries.
+		if slices.Contains(primary, name) {
+			t.Errorf("%q is in the short help; it was meant to be one of the rest", name)
+		}
+		if !strings.Contains(all.String(), commands[name].Usage) {
+			t.Errorf("%q is missing from `help --all`", name)
+		}
+		var out strings.Builder
+		if code := runHelp(Env{Stdout: &out, Stderr: &out}, []string{name}); code != exitcode.OK {
+			t.Errorf("kranq help %s exited %d", name, code)
+		}
+	}
+	if !strings.Contains(short.String(), "help --all") {
+		t.Error("the short help does not say how to see the rest")
+	}
+}
+
+// git and sshd invoke these by name; they are not for people, and listing them
+// in the base help only invites someone to run them by hand.
+func TestTheMachineEntryPointsAreNotAdvertised(t *testing.T) {
+	for _, name := range []string{"git-receive", "git-hook", "exec"} {
+		if slices.Contains(primary, name) {
+			t.Errorf("%q is advertised in the base help", name)
+		}
 	}
 }

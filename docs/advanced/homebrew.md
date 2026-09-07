@@ -153,7 +153,7 @@ the one to use.
 | your laptop, as a client | `brew install simon-em/kranq/kranq` |
 | a build machine you can ssh to | `kranq peer upgrade <name>` from your laptop |
 | a build machine, by hand | `kranq install --with-daemon` |
-| a CI container | the download shim, see [pipelines.md](pipelines.md) |
+| a CI container | the download shim, see [pipelines.md](../pipelines.md) |
 
 A CI container should not use brew: it is a per-run download of a pinned,
 checksummed binary, which is what the shim does.

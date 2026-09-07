@@ -11,7 +11,7 @@ several decisions there reverse earlier drafts.
 
 ## Where this is now
 
-Phases 0 and 1 are done and validated on real hardware. See [docs/status.md](docs/status.md)
+Phases 0 and 1 are done and validated on real hardware. See [docs/status.md](docs/advanced/status.md)
 for the phase-by-phase state and what is next.
 
 ```sh
@@ -137,7 +137,7 @@ against a stub `limactl` on PATH and checked-in real output.
 **An unforced `git push` is not a compare-and-swap.** It rejects a non-fast-forward
 but accepts any fast-forward, and accepts a create unconditionally. Every fence
 advance therefore uses `--force-with-lease=<ref>:<exact oid>`. Do not "simplify" it
-back to a plain push. See [docs/fence.md](docs/fence.md), which records what was
+back to a plain push. See [docs/fence.md](docs/advanced/fence.md), which records what was
 probed and what it showed.
 
 **`--atomic` is load-bearing on a fenced push.** Without it a rejected fence update

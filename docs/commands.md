@@ -10,7 +10,7 @@ Commands marked **internal** are run by git or by the daemon, never by hand.
 | [Running tasks](#running-tasks) | `run` `push` `ps` `logs` `fetch` `result` `cancel` `validate` `render` |
 | [Inspecting a machine](#inspecting-a-machine) | `status` `doctor` `vm` `image` |
 | [The daemon](#the-daemon) | `daemon` `config` `auth` |
-| [Receiving pushes](#receiving-pushes) | `repo` `token` `key` |
+| [Receiving pushes](#receiving-pushes) | `setup-git` `repo` `token` `key` |
 | [At-most-once effects](#at-most-once-effects) | `fence` |
 | [Installing and updating](#installing-and-updating) | `install` `upgrade` `rollback` `uninstall` `version` `help` |
 | [Other machines](#other-machines) | `peer` |
@@ -51,7 +51,7 @@ It exists so the code path is exercised rather than dead.
 
 Send **this repository** to a kranq machine and run a task against exactly what
 was sent. Nothing is cloned from the git host, so no credential is needed to read
-the code, and a commit that exists nowhere else still runs. See [push.md](push.md).
+the code, and a commit that exists nowhere else still runs. See [push.md](advanced/push.md).
 
 ```sh
 KRANQ_ENDPOINT=ssh://macmini@host:333 KRANQ_SSH_KEY=~/.ssh/kranq_push \
@@ -104,33 +104,6 @@ keeps going on the machine, finishes, and takes its verdict with it — which is
 indistinguishable from a failed build unless you ask again. This is how the push
 client rejoins: it captures the id from `task <id> queued` and asks over a fresh
 connection rather than guessing.
-
-### `kranq setup-git [name]`
-
-Run on the build machine. Authorises an ssh key and prints what a client needs,
-which is a URL and a key and nothing else.
-
-```sh
-kranq setup-git ci-dx --host 142.127.69.2:333 --repo dx
-```
-
-| Flag | What |
-| --- | --- |
-| `--host [user@]host[:port]` | the address a client reaches this machine at |
-| `--port N` | the port, if it is not in `--host` |
-| `--repo NAME` | create the repository now rather than on first push |
-| `--key FILE` | authorise this public key instead of generating one |
-
-Variables go to stdout, narration to stderr, so `> vars.env` is a file. The
-private key is printed once and kept nowhere; run it again to rotate.
-
-The key is installed as a forced command, so it can push and fetch and do
-nothing else — no shell, no agent forwarding, no port forwarding. That is also
-what removes the client-side `receivepack` and `uploadpack` overrides: ssh puts
-what git asked for in `SSH_ORIGINAL_COMMAND` and kranq resolves the repository.
-
-**The port cannot be discovered here.** A machine reached through a forwarded
-port sees only its own, so `setup-git` reads sshd's and says that it guessed.
 
 ### `kranq fetch <id> [--out DIR]`
 
@@ -256,7 +229,34 @@ launchd plist: `~/Library/LaunchAgents` is world-readable.
 
 ## Receiving pushes
 
-Only needed on a machine that receives `kranq push`. See [push.md](push.md).
+Setting up the machine other people push to. See [push.md](advanced/push.md).
+
+### `kranq setup-git [name]`
+
+Run on the build machine. Authorises an ssh key and prints what a client needs,
+which is a URL and a key and nothing else.
+
+```sh
+kranq setup-git ci-dx --host 142.127.69.2:333 --repo dx
+```
+
+| Flag | What |
+| --- | --- |
+| `--host [user@]host[:port]` | the address a client reaches this machine at |
+| `--port N` | the port, if it is not in `--host` |
+| `--repo NAME` | create the repository now rather than on first push |
+| `--key FILE` | authorise this public key instead of generating one |
+
+Variables go to stdout, narration to stderr, so `> vars.env` is a file. The
+private key is printed once and kept nowhere; run it again to rotate.
+
+The key is installed as a forced command, so it can push and fetch and do
+nothing else — no shell, no agent forwarding, no port forwarding. That is also
+what removes the client-side `receivepack` and `uploadpack` overrides: ssh puts
+what git asked for in `SSH_ORIGINAL_COMMAND` and kranq resolves the repository.
+
+**The port cannot be discovered here.** A machine reached through a forwarded
+port sees only its own, so `setup-git` reads sshd's and says that it guessed.
 
 ### `kranq repo ls|create|rm`
 
@@ -308,7 +308,7 @@ machine.
 ### `kranq fence ls|show|break --repo NAME`
 
 A task declaring `effects.push` holds a fence at the git host for the duration,
-so a lost run cannot open a second pull request. See [fence.md](fence.md).
+so a lost run cannot open a second pull request. See [fence.md](advanced/fence.md).
 
 ```sh
 kranq fence ls    --repo dx
@@ -369,10 +369,12 @@ tasks, artifacts and image metadata.
 
 ### `kranq version [--json]`
 
-### `kranq help [command]`
+### `kranq help [command|--all]`
 
-The command table, or one command's usage. `kranq <command>` with wrong
-arguments prints the same thing.
+`kranq help` is a short list: setting a machine up, watching it, and reaching
+another one. `kranq help --all` is this table. `kranq help <command>`, or
+`kranq <command>` with wrong arguments, prints one command's usage — including
+the ones the short list leaves out.
 
 ---
 

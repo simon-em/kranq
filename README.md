@@ -1,43 +1,57 @@
 # kranq
 
 One binary that runs CI jobs in disposable [Lima](https://lima-vm.io) VMs on a
-macOS build machine. It installs itself, installs its own dependencies, keeps
-state in a local daemon, receives work over ssh or a git push, and exposes all of
-it through a CLI.
+macOS build machine. A pipeline pushes its code with git and reads the result
+with git; there is nothing to install on the client.
 
-It replaces `ci-runner` and the two bash clients in `infrastructure/ci/`.
-
-```sh
-kranq install                                    # binary, PATH, lima, launchd
-kranq run ci/tasks/spec.yaml --repo dx --branch main
-kranq push ci/tasks/spec.yaml --repo dx          # send this repo, run it there
-kranq doctor                                     # is this machine able to run jobs
+```yaml
+- source infrastructure/ci/kranq-ci
+- git push kranq -o task_file=ci/tasks/spec.yaml "${KRANQ_OPTS[@]}"
+- git pull --ff-only kranq "$KRANQ_TASK"   # what the run produced
+- git fetch kranq "$KRANQ_OK"              # missing if the run failed
 ```
 
-**[Every command](docs/commands.md)** · [Writing a task](docs/tasks.md) ·
-[The Kranqfile](docs/build.md) ·
-[Pushing work to kranq](docs/push.md) · [Wiring it into a pipeline](docs/pipelines.md) ·
-[At-most-once effects](docs/fence.md) · [Operating it](docs/operations.md) ·
-[Installing with Homebrew](docs/homebrew.md) ·
-[Where things stand](docs/status.md)
+## Set it up
 
-## Why a VM per job
+On the build machine:
 
-Concurrent CI jobs on one machine collide on ports, Compose project names and
-working trees. The usual fix is to allocate all three per job, which is fiddly
-and has to be redone for every project.
+```sh
+brew tap simon-em/kranq https://github.com/simon-em/kranq
+brew install simon-em/kranq/kranq
+kranq setup-git ci-dx --host 142.127.69.2:333 --repo dx
+```
 
-A VM has its own network namespace, so none of it is shared. Each job uses
-whatever ports the project normally uses, `docker compose up` works unmodified,
-and two jobs cannot see each other. Cloning is nearly free: `limactl clone` is an
-APFS copy-on-write clone.
+The tap needs the URL because the repository is not named `homebrew-kranq`.
+Lima is fetched and verified the first time a command needs a VM.
 
-Measured on a 16 GiB M-series Mac: the shared base image builds in 153s, dx's
-layers in 289s, and a job against a warm image runs in about 20s.
+`setup-git` authorises an ssh key and prints what the pipeline needs:
 
-## The environment is a Kranqfile
+```
+KRANQ_PEER=macmini@142.127.69.2:333
+KRANQ_HOST_KEY=[142.127.69.2]:333 ssh-ed25519 AAAAC3Nz…
+KRANQ_SSH_KEY<<EOF
+-----BEGIN OPENSSH PRIVATE KEY-----
+…
+EOF
+```
 
-A repository's `Kranqfile` reads like a Dockerfile, and each `RUN` is a layer:
+`KRANQ_PEER` is the only one that must be set; the other two are for a caller
+with no ssh identity of its own. Variables go to stdout and everything else to
+stderr, so `kranq setup-git … > vars.env` is a file. The private key is printed
+once and kept nowhere — run it again to rotate.
+
+That key is a forced command: it can push and fetch and nothing else, and it is
+what lets the client be a plain URL with no git configuration.
+
+```
+$ ssh -i ci-dx macmini@142.127.69.2 -p 333 id
+kranq: "id" is not a git command
+```
+
+## How a run works
+
+A repository's `Kranqfile` describes the environment, and reads like a
+Dockerfile:
 
 ```
 RUN sudo apt-get install -y --no-install-recommends default-jdk libvips
@@ -46,139 +60,87 @@ COPY Gemfile Gemfile.lock .
 RUN bundle install
 ```
 
-A layer is named by a hash of its parent, its command and the **contents** of the
-files it copies — and by nothing else. No repository, no branch. So editing a
-lockfile rebuilds the tail and nothing before it, and two projects installing the
-same packages share that layer rather than each building it.
+Each `RUN` is a layer, named by a hash of its parent, its command and the
+**contents** of the files it copies — no repository, no branch. Editing a
+lockfile rebuilds the tail and nothing before it, and two projects installing
+the same packages share that layer instead of each building it.
 
-Layers are diffs, not copies: `limactl clone` is an APFS copy-on-write clone, so
-a layer is charged only for the blocks it writes. Measured on the 2.9 GB base,
-cloning it costs 0.10s and zero bytes. See [build.md](docs/build.md).
-
-## Two ways to get work to it
-
-**Clone.** The VM fetches the repository from the git host, using a forwarded
-token or ssh agent. This is what a pipeline that already has credentials does.
-
-**Push.** You send the code to kranq and it already has it:
-
-```sh
-git remote add kranq ssh://macmini@buildhost:333/dx.git
-git config remote.kranq.receivepack '$HOME/.local/bin/kranq git-receive'
-git push kranq main:refs/heads/run -o task=ci/tasks/spec.yaml
-```
-
-If your ssh key already reaches the machine, that is the whole setup: the
-repository is created on the first push, and no kranq-specific key is involved.
-
-The build log streams back to your terminal as it runs. Nothing is cloned, so
+A push runs the task against exactly what was sent. Nothing is cloned, so
 nothing needs a credential to read the code, and a commit that exists nowhere
-else still runs. See [push.md](docs/push.md).
+else still runs. The log streams back to the pushing terminal as it goes.
 
-## What it guarantees
+**A run is a branch.** The name you push to is the name you pull from: when the
+job finishes, `task/<run>` points at a commit whose parent is the commit you
+pushed. Pulling it brings back files the job changed and whatever it wrote into
+its `artifacts:` path, at the paths it wrote them — so a report ends up where
+the tool that made it already put it, and there is nothing to unpack.
 
-**A job outlives its daemon.** Each job runs as its own process group and records
-its result in the task directory. Kill the daemon mid-run and the job keeps
-going; the daemon that comes back re-adopts it and reports what happened.
+**The verdict is a second ref.** A push exits 0 whenever it was accepted,
+whatever the task did, so `ok/<run>` exists only if the task succeeded and
+`git fetch` of a missing ref exits 128. It is separate from the run's own ref
+because a report is worth having precisely when the run failed.
 
-**A lost job never silently runs twice.** There is no path from `running` back to
-`queued`. A task whose executor is gone becomes `lost`, and re-running it is a
-human decision under a new task id.
-
-**An effect lands at most once.** A task declaring `effects.push` holds a fence
-at the git host, and its branch push is atomic with advancing that fence, so a
-partitioned attempt cannot open a second pull request. What that does and does
-not cover is set out in [fence.md](docs/fence.md).
-
-**Claude usage exhaustion is not a failure.** The task is held and resumes when
-usage returns. Rotating the token opens the gate immediately.
-
-## Install
+## Watching it
 
 ```sh
-brew tap simon-em/kranq https://github.com/simon-em/kranq
-brew install simon-em/kranq/kranq
+kranq status        # queue, machine and claude state
+kranq ps            # tasks
+kranq logs <id> -f  # follow one
+kranq doctor        # can this machine run jobs at all
 ```
 
-That is all of it: lima is fetched and verified the first time a command needs a
-VM.
-
-See [homebrew.md](docs/homebrew.md). Or from a binary you already have:
+From a laptop, against another build machine:
 
 ```sh
-./kranq install --with-daemon
-kranq auth claude --stdin < token.txt
-kranq doctor
-```
-
-`install` verifies Lima against a checksum compiled into the binary *and* the
-published `SHA256SUMS`, which must agree, then keeps it under `$KRANQ_HOME/deps`
-and calls it by absolute path. A Homebrew lima appearing or disappearing cannot
-change what runs.
-
-To set up another build machine from your laptop:
-
-```sh
-kranq peer add mini-1 --ssh macmini@buildhost:333 --default
+kranq peer add mini-1 --ssh macmini@142.127.69.2:333 --default
 kranq peer upgrade mini-1
 kranq peer test mini-1
 ```
+
+`kranq help --all` lists everything else.
+
+## Documentation
+
+[Wiring it into a pipeline](docs/pipelines.md) ·
+[Writing a task](docs/tasks.md) ·
+[The Kranqfile](docs/build.md) ·
+[Every command](docs/commands.md)
+
+Deeper, in [docs/advanced](docs/advanced):
+[pushing work to kranq](docs/advanced/push.md) ·
+[at-most-once effects](docs/advanced/fence.md) ·
+[operating it](docs/advanced/operations.md) ·
+[installing with Homebrew](docs/advanced/homebrew.md) ·
+[testing](docs/advanced/testing.md) ·
+[killing a job](docs/advanced/teardown.md) ·
+[where things stand](docs/advanced/status.md)
 
 ## Layout
 
 ```
 main.go              os.Exit(cli.Main(os.Args))
 assets/              lima.yaml + mcp/*.py, embedded in the binary
-
 internal/cli/        subcommand dispatch and terminal output
 internal/task/       the task schema, and compiling a spec to one bash script
 internal/svc/        the pure domain API every entry point goes through
 internal/state/      the task store
 internal/sched/      admission, re-adoption, the lost-task rule
 internal/daemon/     the daemon, the job supervisor, the git endpoint
-internal/jobproc/    the handover between a job process and the daemon
-internal/ipc/        http over a unix socket
 internal/run/        one job end to end, including the pushed-source path
 internal/project/    the Kranqfile: parsing it, and resolving what COPY selects
 internal/image/      content-addressed layers, the chain cache, build, prune
 internal/vm/         the limactl driver, behind an interface with a fake
 internal/gitsrv/     receiving a git push over http and over ssh
-internal/authkeys/   forced-command entries in ~/.ssh/authorized_keys
-internal/token/      named tokens, stored only as hashes
 internal/fence/      at-most-once effects, as a compare-and-swap at the git host
-internal/gate/       the Claude usage gate, persisted and keyed by token
 internal/peer/       other build machines
-internal/upgrade/    replacing the binary, and going back
-internal/selfinstall/ install, PATH, launchd
-internal/deps/       fetching and verifying lima
-internal/doctor/     the checks, as pure functions
-internal/hostres/    memory, cpu and disk probes
-internal/sockpath/   the macOS 104-byte unix socket limit
-internal/exitcode/   the exit code contract
 ```
 
-About 9,900 lines of Go and 354 tests. `gopkg.in/yaml.v3` is the only dependency.
+The rest — `jobproc ipc authkeys token gate upgrade selfinstall deps doctor
+hostres sockpath exitcode` — is named for what it does. About 12,000 lines of
+Go and 443 tests; `gopkg.in/yaml.v3` is the only dependency.
 
-## Testing
+`go test ./...` needs no VM and no network: the `limactl` surface sits behind an
+interface a fake satisfies, the fence and the git endpoint run against real
+local bare repositories, and the ssh path is driven by a fake `ssh` on PATH.
 
-`go test ./...` needs no VM and no network. The `limactl` surface sits behind an
-interface a fake satisfies, the fence and the git endpoint run against real local
-bare repositories, and the ssh path is driven by a fake `ssh` on PATH.
-
-What that cannot cover is run against real hardware, and
-[status.md](docs/status.md) records which of those have actually been done.
-
-## Things that will bite you
-
-**macOS caps a unix socket path at 104 bytes.** This has cost time three
-separate ways: the ssh-agent socket, the daemon socket, and Lima instance names.
-`doctor` checks it.
-
-**Non-login ssh on macOS gets a minimal PATH.** Nothing kranq runs on a peer
-relies on PATH; everything uses an absolute path.
-
-**An unforced `git push` is not a compare-and-swap.** It accepts any
-fast-forward, and accepts a create unconditionally. Fence updates use
-`--force-with-lease` with an exact expected object. See [fence.md](docs/fence.md).
-
-More of these, with what they cost to discover, are in `CLAUDE.md`.
+Things that have cost time to discover are in `CLAUDE.md`.

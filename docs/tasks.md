@@ -97,7 +97,7 @@ With this set, two things change inside the VM:
 - a plain `git push` **fails**, with an error naming `kranq_push`. Without that
   the helper would be advisory and one stray push would bypass the whole thing.
 
-See [fence.md](fence.md) for what that protects against and what it does not.
+See [fence.md](advanced/fence.md) for what that protects against and what it does not.
 
 ## Resources
 

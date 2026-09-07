@@ -57,7 +57,7 @@ func init() {
 		"push":        {"push <task.yaml> [flags]", "send this repo to kranq and run a task against it", runPush},
 		"result":      {"result <id> [--wait D]", "reprint a run's outcome, waiting if it is still going", runResult},
 		"render":      {"render <task.yaml>", "print the bash script a spec compiles to", runRender},
-		"help":        {"help [command]", "show usage", runHelp},
+		"help":        {"help [command|--all]", "show usage", runHelp},
 	}
 }
 
@@ -84,17 +84,39 @@ func dispatch(env Env, args []string) int {
 	return cmd.Run(env, args[1:])
 }
 
+// What the base help lists, in the order someone meets them. The rest are
+// entry points git and sshd call, or things you reach for once a year; they
+// all still work and `kranq help <name>` still documents them.
+var primary = []string{
+	"install", "setup-git",
+	"status", "ps", "logs", "doctor",
+	"peer",
+	"version", "help",
+}
+
 func usage(w io.Writer) {
 	fmt.Fprintf(w, "kranq %s\n\nusage: kranq <command> [arguments]\n\n", Version)
+	list(w, primary)
+	fmt.Fprintln(w, "\n  kranq help --all   every command")
+}
+
+func usageAll(w io.Writer) {
+	fmt.Fprintf(w, "kranq %s\n\nusage: kranq <command> [arguments]\n\n", Version)
 	names := make([]string, 0, len(commands))
-	width := 0
 	for name := range commands {
 		names = append(names, name)
+	}
+	sort.Strings(names)
+	list(w, names)
+}
+
+func list(w io.Writer, names []string) {
+	width := 0
+	for _, name := range names {
 		if n := len(commands[name].Usage); n > width {
 			width = n
 		}
 	}
-	sort.Strings(names)
 	for _, name := range names {
 		fmt.Fprintf(w, "  %-*s  %s\n", width, commands[name].Usage, commands[name].Summary)
 	}
@@ -103,6 +125,10 @@ func usage(w io.Writer) {
 func runHelp(env Env, args []string) int {
 	if len(args) == 0 {
 		usage(env.Stdout)
+		return exitcode.OK
+	}
+	if args[0] == "--all" || args[0] == "-a" {
+		usageAll(env.Stdout)
 		return exitcode.OK
 	}
 	cmd, ok := commands[args[0]]
