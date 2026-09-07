@@ -257,8 +257,24 @@ Safe to re-run; re-running with a name rotates that key.
 | `--key FILE` | authorise this public key instead of generating one |
 | `--key-only` | just the key: leave lima and the daemon alone |
 
-Variables go to stdout, narration to stderr, so `> vars.env` is a file. The
-private key is printed once and kept nowhere.
+Naming a key issues one and prints what a pusher needs:
+
+```
+KRANQ_PEER=macmini@142.127.69.2:333
+KRANQ_HOST_KEY=[142.127.69.2]:333 ssh-ed25519 AAAAC3Nz…
+KRANQ_SSH_KEY<<EOF
+-----BEGIN OPENSSH PRIVATE KEY-----
+…
+EOF
+```
+
+`KRANQ_PEER` is the only one that must be set; the others are for a caller with
+no ssh identity of its own. Variables go to stdout, narration to stderr, so
+`> vars.env` is a file. The private key is printed once and kept nowhere —
+`--key ci-dx.pub` authorises one you generated yourself, so kranq never has it.
+
+None of this is needed when the pusher's key already reaches the machine: the
+shared repository at `~/kranq.git` takes any codebase from any such key.
 
 Nothing is pre-created per project. One repository is enough because a layer's
 name does not contain one, and what the code *is* travels as the `repo` push

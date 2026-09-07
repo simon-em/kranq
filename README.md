@@ -59,58 +59,10 @@ git remote add kranq macmini@142.127.69.2:kranq
 Not on any other port: scp-style syntax has no field for one, and git reads
 `host:333:kranq` as a path called `333:kranq`. Use the `ssh://` form there.
 
-To issue a confined credential instead — a key that can push and fetch and
-nothing else — name one:
-
-```sh
-kranq setup ci-dx
-```
-
-
-```
-KRANQ_PEER=macmini@142.127.69.2:333
-KRANQ_HOST_KEY=[142.127.69.2]:333 ssh-ed25519 AAAAC3Nz…
-KRANQ_SSH_KEY<<EOF
------BEGIN OPENSSH PRIVATE KEY-----
-…
-EOF
-```
-
-`KRANQ_PEER` is the only one that must be set; the other two are for a caller
-with no ssh identity of its own. Variables go to stdout and everything else to
-stderr, so `kranq setup ci-dx > vars.env` is a file. The private key is printed
-once and kept nowhere — run it again to rotate.
-
-Naming a key is the only thing that makes kranq print one. Bare `kranq setup`
-issues no credential and reads back no address, because whoever is standing on
-a single build machine already knows how to reach it.
-
-To keep the private half to yourself, generate it where it belongs and hand over
-only the public one:
-
-```sh
-kranq setup ci-dx --key ci-dx.pub
-```
-
-Nothing is pre-created: a repository comes into being on its first push.
-
-**A machine cannot see the address it is reached at**, so `setup` uses the one
-you arrived on and says so. When that is a forwarded port it will be wrong —
-pass the outside one with `--host 142.127.69.2:333`, or run it from a laptop,
-where the address is already known:
-
-```sh
-kranq peer add mini-1 --ssh macmini@142.127.69.2:333 --default
-kranq setup ci-dx --peer mini-1
-```
-
-That key is a forced command: it can push and fetch and nothing else, and it is
-what lets the client be a plain URL with no git configuration.
-
-```
-$ ssh -i ci-dx macmini@142.127.69.2 -p 333 id
-kranq: "id" is not a git command
-```
+A key that should be able to push and nothing else — no shell, no agent
+forwarding — can have one issued instead. That is
+[`kranq setup <name>`](docs/commands.md#kranq-setup-name---peer-name), and
+nothing here needs it: a key already in `authorized_keys` is enough.
 
 ## How a run works
 
