@@ -44,13 +44,25 @@ func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (st
 		return state.Task{}, errf(exitcode.InvalidSpec, "%v", err)
 	}
 
+	// A repository name is what the git host is asked for, so it is needed only
+	// by a task that goes there: one holding a fence, and one with no pushed
+	// source, which has to clone. Everything else already has the code and is
+	// identified by the commit it arrived as -- naming it would be a label
+	// nobody chose, which is what "kranq" was when every codebase shared one
+	// repository.
 	repo := firstNonEmpty(req.Repo, spec.Repo)
-	if repo == "" {
-		return state.Task{}, errf(exitcode.Misconfigured, "no repo: the spec names none and the request supplied none")
-	}
 	branch := firstNonEmpty(req.Branch, spec.Branch)
-	if branch == "" {
-		return state.Task{}, errf(exitcode.Misconfigured, "no branch: the spec names none and the request supplied none")
+	if why := reachesGitHost(spec, req); why != "" {
+		if repo == "" {
+			return state.Task{}, errf(exitcode.Misconfigured,
+				"no repo: this task %s, so it needs a repository name. "+
+					"Push with -o repo=<name>, or name one in the spec", why)
+		}
+		if branch == "" {
+			return state.Task{}, errf(exitcode.Misconfigured,
+				"no branch: this task %s, so it needs a branch. "+
+					"Push with -o branch=<name>, or name one in the spec", why)
+		}
 	}
 	if spec.NeedsClaude() && !caps.HasClaudeToken {
 		return state.Task{}, errf(exitcode.Misconfigured,
@@ -91,6 +103,17 @@ func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (st
 }
 
 // An empty kind means the task declared no effects and runs unfenced.
+// The two things that turn a name into an address.
+func reachesGitHost(spec task.Spec, req SubmitRequest) string {
+	if spec.Fenced() {
+		return "declares an effect, which is fenced at the git host"
+	}
+	if req.SourceCommit == "" {
+		return "arrived with no commit, so it has to clone its source"
+	}
+	return ""
+}
+
 func fenceKind(spec task.Spec) string {
 	if !spec.Fenced() {
 		return ""

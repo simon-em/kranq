@@ -1,6 +1,7 @@
 package image
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -218,5 +219,26 @@ func TestRunNameIsStableForOneTask(t *testing.T) {
 	id := "20260904T203017-b95c23b6c70256e8"
 	if RunName("dx", "spec", id) != RunName("dx", "spec", id) {
 		t.Error("RunName must be deterministic; the reaper looks VMs up by it")
+	}
+}
+
+// A task that named no repository left a doubled hyphen in the instance name,
+// and lima refuses that: "kranq-run--t-6a331d1b is not a valid identifier".
+// It surfaced after the image was built, which is the expensive place to fail.
+func TestARunNameSurvivesAMissingPart(t *testing.T) {
+	valid := regexp.MustCompile(`^[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*$`)
+	for _, c := range []struct{ repo, label string }{
+		{"", "t"},
+		{"dx", ""},
+		{"", ""},
+		{"dx", "spec"},
+	} {
+		got := RunName(c.repo, c.label, "20260907T183908-0b9f29f259bc11ad")
+		if !valid.MatchString(got) {
+			t.Errorf("RunName(%q, %q) = %q, which lima refuses", c.repo, c.label, got)
+		}
+		if len(got) > MaxRunName {
+			t.Errorf("RunName(%q, %q) = %q, longer than %d", c.repo, c.label, got, MaxRunName)
+		}
 	}
 }

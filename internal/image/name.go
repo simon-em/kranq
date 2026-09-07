@@ -98,10 +98,20 @@ func Chain(base, disk string, layers []project.Resolved) []string {
 
 const MaxRunName = 40
 
+// A task need not name a repository, so the parts are joined rather than
+// formatted: an empty one used to leave a doubled hyphen, and lima refuses the
+// instance outright -- "kranq-run--t-6a331d1b is not a valid identifier", after
+// the image had already been built.
 func RunName(repo, label, taskID string) string {
 	sum := sha256.Sum256([]byte(taskID))
 	suffix := fmt.Sprintf("-%x", sum[:4])
-	base := fmt.Sprintf("%s-%s-%s", RunPrefix, Slugify(repo), Slugify(label))
+	parts := []string{RunPrefix}
+	for _, part := range []string{Slugify(repo), Slugify(label)} {
+		if part != "" {
+			parts = append(parts, part)
+		}
+	}
+	base := strings.Join(parts, "-")
 	if room := MaxRunName - len(suffix); len(base) > room {
 		base = strings.Trim(base[:room], "-")
 	}

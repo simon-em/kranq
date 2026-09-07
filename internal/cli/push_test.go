@@ -198,12 +198,16 @@ func TestEveryPushGoesToItsOwnRef(t *testing.T) {
 	}
 }
 
-func TestABranchIsReportedEvenWhenTheRefIsANonce(t *testing.T) {
+// A run ref is a nonce, and a nonce is not a branch. Nothing is invented from
+// it: the branch is only ever an address at the git host, and a run that is not
+// going there has no use for one -- "kranq-push" was a label nobody chose,
+// shown in `kranq ps` as though it meant something.
+func TestNoBranchIsInventedFromARunRef(t *testing.T) {
 	if got := branchFromRef("refs/heads/ci/lima"); got != "ci/lima" {
 		t.Errorf("branchFromRef = %q, want the branch", got)
 	}
-	if got := branchFromRef(pushRef()); got != "kranq-push" {
-		t.Errorf("branchFromRef = %q, want a readable fallback, not a nonce", got)
+	if got := branchFromRef(pushRef()); got != "" {
+		t.Errorf("branchFromRef = %q, want nothing invented from a nonce", got)
 	}
 }
 

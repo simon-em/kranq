@@ -193,3 +193,44 @@ func TestARequestWithOneNameStillWorks(t *testing.T) {
 		t.Errorf("Repo=%q SourceRepo=%q, want dx and empty", got.Repo, got.SourceRepo)
 	}
 }
+
+// A push carries the code, so the commit already says what ran. Requiring a
+// name on top of that produced "kranq" -- the repository the objects landed in,
+// which is a place and not a codebase.
+func TestAPushedTaskNeedsNoRepositoryName(t *testing.T) {
+	got, err := Prepare(SubmitRequest{
+		SpecYAML:     []byte("name: t\nsteps:\n  - run: true\n"),
+		SourceRepo:   "kranq",
+		SourceCommit: "34a81a770e5244b86e5b9cd3e845190d5beea4c7",
+	}, Capabilities{}, time.Now(), "id-3")
+	if err != nil {
+		t.Fatalf("a pushed task was refused for having no name: %v", err)
+	}
+	if got.Repo != "" {
+		t.Errorf("Repo = %q, want it left empty rather than invented", got.Repo)
+	}
+}
+
+// The two things that turn a name into an address still insist on one, because
+// without it there is nothing to ask the git host for.
+func TestTheThingsThatReachTheGitHostStillNeedAName(t *testing.T) {
+	fenced := []byte("name: t\neffects:\n  push: true\nsteps:\n  - run: true\n")
+	if _, err := Prepare(SubmitRequest{
+		SpecYAML:     fenced,
+		SourceCommit: "34a81a770e52",
+		Branch:       "main",
+	}, Capabilities{}, time.Now(), "id-4"); err == nil {
+		t.Error("a fenced task was accepted with no repository to fence at")
+	} else if !strings.Contains(err.Error(), "fenced at the git host") {
+		t.Errorf("err = %v, want it to say why a name is needed", err)
+	}
+
+	if _, err := Prepare(SubmitRequest{
+		SpecYAML: []byte("name: t\nsteps:\n  - run: true\n"),
+		Branch:   "main",
+	}, Capabilities{}, time.Now(), "id-5"); err == nil {
+		t.Error("a task with nothing to run was accepted")
+	} else if !strings.Contains(err.Error(), "clone") {
+		t.Errorf("err = %v, want it to say it has to clone", err)
+	}
+}

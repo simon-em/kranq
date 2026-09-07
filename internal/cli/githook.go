@@ -89,15 +89,15 @@ func pushOptions() []string {
 
 // A client that names no branch usually pushed to one, so the ref is the best
 // guess. A push that only carries objects lands on a run ref, whose name is a
-// nonce that would be a nonsense branch name.
+// nonce -- and nothing is invented from it, because the branch is only ever an
+// address at the git host and a run that is not going there has no use for one.
+// Prepare insists on it in the two cases that do.
 func branchFromRef(ref string) string {
 	if ref == gitsrv.AnonRef || strings.HasPrefix(ref, gitsrv.TaskRefPrefix) {
-		return "kranq-push"
+		return ""
 	}
-	if head, ok := strings.CutPrefix(ref, "refs/heads/"); ok {
-		return head
-	}
-	return "kranq-push"
+	head, _ := strings.CutPrefix(ref, "refs/heads/")
+	return head
 }
 
 // runName is what the run will be called, which is also what the pusher pulls
@@ -219,9 +219,14 @@ func hookRun(env Env, repo, socket string, req gitsrv.Request, updates []update)
 	// The repository the push landed in is only where the objects went. What
 	// the code *is* comes from the pusher, so that one repository can hold
 	// every codebase without a task's fence or its own `repo:` being wrong.
+	// The shared repository is a place, not a codebase, so its name says
+	// nothing about what was pushed and is not worth recording as if it did.
 	source := repo
-	if req.Repo != "" {
+	switch {
+	case req.Repo != "":
 		repo = req.Repo
+	case repo == gitsrv.DefaultRepo:
+		repo = ""
 	}
 
 	client := ipc.NewClient(socket)

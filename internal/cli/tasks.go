@@ -36,15 +36,28 @@ func runPS(env Env, args []string) int {
 		return exitcode.Unreachable
 	}
 	w := tabwriter.NewWriter(env.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "ID\tTASK\tREPO\tBRANCH\tSTATUS\tAGE")
+	fmt.Fprintln(w, "ID\tTASK\tSOURCE\tBRANCH\tSTATUS\tAGE")
 	for _, t := range tasks {
 		if !*all && t.Terminal() {
 			continue
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			t.ID, t.Name, t.Repo, t.Branch, describe(t), age(t))
+			t.ID, t.Name, source(t), dash(t.Branch), describe(t), age(t))
 	}
 	return flushed(w)
+}
+
+// A task only carries a repository name when something will take it to the git
+// host. Otherwise the commit is what identifies the code, and it is the truer
+// answer anyway: it says exactly what ran.
+func source(t state.Task) string {
+	if t.Repo != "" {
+		return t.Repo
+	}
+	if len(t.SourceCommit) >= 12 {
+		return t.SourceCommit[:12]
+	}
+	return dash(t.SourceCommit)
 }
 
 func describe(t state.Task) string {

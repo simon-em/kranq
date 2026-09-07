@@ -36,9 +36,11 @@ does not contain one — it is a hash of its parent, its command and the content
 of what it copies — so projects with the same Kranqfile steps already share
 layers wherever they arrive.
 
-What the code *is* travels beside it as `-o repo=<name>`, which `kranq-ci` sends
-from `CI_REPO` or `BITBUCKET_REPO_SLUG`. That is the name a fence and a spec's
-own `repo:` are about; the URL only says where the objects go.
+Most runs need no name at all: the push carries the code, so the commit says
+what ran. A name is only an address at the git host, so it is required in the
+two cases that go there — a task holding a fence, and a task that arrived with
+no commit and has to clone. `kranq-ci` sends one as `-o repo=<name>` whenever
+`CI_REPO` or `BITBUCKET_REPO_SLUG` is set, which covers both.
 
 On port 22, `macmini@142.127.69.2:kranq` works as well — git resolves a bare
 name by appending `.git`. Not on another port: scp-style syntax has no field

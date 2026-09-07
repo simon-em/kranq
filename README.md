@@ -41,8 +41,13 @@ the repository are kranq.
 **One repository is enough because a layer's name does not contain one.** A
 layer is a hash of its parent, its command and the contents of what it copies,
 so two projects with the same Kranqfile steps already share layers wherever
-they arrive. What the code *is* travels separately, as a `repo` push option,
-which is what a fence and a spec's own `repo:` are about.
+they arrive.
+
+**Most runs need no name at all.** A push carries the code, so the commit
+already says what ran, and that is what `kranq ps` shows. A name is only an
+address at the git host, so kranq asks for one — `-o repo=<name>` — in the two
+cases that go there: a task holding a fence, and a task that arrived with no
+commit and has to clone. Anything else is identified by what it is.
 
 On port 22 the short form works too, since git resolves a bare name by
 appending `.git`:

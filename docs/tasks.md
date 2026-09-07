@@ -151,6 +151,16 @@ name: perf
 kranqfile: Kranqfile.perf
 ```
 
+## The repository a task is about
+
+`repo:` names the repository at the git host. It is needed only by a task that
+goes there: one declaring `effects.push`, whose fence lives at the host, and one
+run without a pushed commit, which has to clone. A pushed task that does neither
+is identified by its commit, and naming it is optional.
+
+The pusher can say it instead, with `-o repo=<name>`, and that wins over the
+spec — a shared task runs against whichever repository submitted it.
+
 ## Artifacts
 
 `artifacts:` names a path inside the checkout, defaulting to `ci-artifacts`. Set
