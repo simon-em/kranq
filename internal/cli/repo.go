@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -120,7 +121,13 @@ func repoRemove(env Env, args []string) int {
 	return exitcode.OK
 }
 
+// user.Current first, because $USER is not set in every environment kranq runs
+// in -- a launchd job among them, and that is where setup-git is often run
+// from. The name ends up in an ssh address, so getting it wrong is not cosmetic.
 func currentUser() string {
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username
+	}
 	if v := os.Getenv("USER"); v != "" {
 		return v
 	}

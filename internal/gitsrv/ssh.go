@@ -86,11 +86,51 @@ func ParseSSHCommand(original string) (SSHCommand, error) {
 		default:
 			return cmd, fmt.Errorf("%q is not allowed here", firstWord(sub))
 		}
+		// kranq's own flags come before the path, and a client configured for
+		// the other way in sends them: remote.<name>.uploadpack is
+		// "kranq git-receive --upload". Under a forced command the whole
+		// string arrives here, so the flags have to be read rather than taken
+		// for part of the repository -- which made every fetch fail with "the
+		// repository argument is not quoted as git quotes it". Unknown flags
+		// are refused, because this is the boundary between a key and a shell.
+		verb, rest, err := takeFlags(verb, rest)
+		if err != nil {
+			return cmd, err
+		}
+		return finish(verb, rest)
 	}
 	if verb != VerbReceive && verb != VerbUpload {
 		return cmd, fmt.Errorf("%q is not allowed; this key may only push and fetch", firstWord(trimmed))
 	}
+	return finish(verb, rest)
+}
 
+func takeFlags(verb, rest string) (string, string, error) {
+	for {
+		trimmed := strings.TrimSpace(rest)
+		if !strings.HasPrefix(trimmed, "-") {
+			return verb, trimmed, nil
+		}
+		word, remainder, _ := strings.Cut(trimmed, " ")
+		switch {
+		case word == "--upload":
+			verb, rest = VerbUpload, remainder
+		case strings.HasPrefix(word, "--name="):
+			rest = remainder
+		case word == "--name":
+			_, after, found := strings.Cut(strings.TrimSpace(remainder), " ")
+			if !found {
+				return verb, "", fmt.Errorf("--name has no value")
+			}
+			rest = after
+		default:
+			return verb, "", fmt.Errorf("%q is not allowed here", firstWord(word))
+		}
+	}
+}
+
+func finish(verb, rest string) (SSHCommand, error) {
+	var cmd SSHCommand
 	path, err := unquote(strings.TrimSpace(rest))
 	if err != nil {
 		return cmd, err

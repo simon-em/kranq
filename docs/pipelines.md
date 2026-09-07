@@ -1,111 +1,108 @@
 # Wiring it into a pipeline
 
-The pipeline container is Linux and kranq cross-compiles to a static
-`linux/amd64` binary, which is why the client is Go and not bash: the previous
-bash clients broke twice on a `ruby:` image having no `python3` and no `pgrep`.
-
-## The shim
-
-Two files, and neither changes when kranq does:
-
-```sh
-# infrastructure/ci/kranq
-#!/bin/sh
-set -eu
-dir="$(cd "$(dirname "$0")" && pwd)"
-. "$dir/kranq.lock"                       # version= and sha256 per platform
-bin="$HOME/.kranq/bin/kranq-$version"
-if [ ! -x "$bin" ]; then
-    mkdir -p "$(dirname "$bin")"
-    curl -fsSL "$url" -o "$bin.tmp"
-    echo "$sha256_linux_amd64  $bin.tmp" | sha256sum -c -
-    chmod +x "$bin.tmp" && mv "$bin.tmp" "$bin"
-fi
-exec "$bin" "$@"
-```
-
-Bumping kranq is then a one-line diff to `kranq.lock` that reverts cleanly. Add
-`$HOME/.kranq` to the pipeline's `caches:` so the download happens once.
-
-## Over ssh, which needs no tunnel
+There is nothing to install. A pipeline pushes with git and reads the result
+with git, so the only requirement is an ssh key that reaches the build machine.
 
 ```yaml
 - step:
     name: spec
     script:
-      - export KRANQ_ENDPOINT="ssh://$KRANQ_HOST"
-      - infrastructure/ci/kranq push ci/tasks/spec.yaml --repo dx
+      - source infrastructure/ci/kranq-setup
+      - git push kranq -o task_file=ci/tasks/spec.yaml "${KRANQ_OPTS[@]}"
+      - git fetch kranq "$KRANQ_OK"
 ```
 
-If the pipeline's key already reaches the build machine, that is all of it:
-kranq asks for itself as the receive-pack, so nothing is set up on the far side
-and the repository is created on the first push.
+This replaced a downloaded Go client behind a checksum-pinned shim. The client
+existed to stream logs and turn a result into an exit code; `git push` streams
+the hook's output already, and the exit code is a ref that is either there or
+not.
 
-For a pipeline that should be able to push and nothing else, give it its own key
-and add it with `kranq key add bitbucket-dx <key>.pub`. The forced command then
-confines it, which is worth doing for a shared credential even though it is not
-required.
-
-If the pipeline has no ambient ssh setup, give it a key in a secured variable and
-point `KRANQ_SSH_KEY` at a file you write from it.
-
-## Over https
-
-```yaml
-- step:
-    name: spec
-    script:
-      - infrastructure/ci/kranq push ci/tasks/spec.yaml --repo dx
-    # KRANQ_ENDPOINT and KRANQ_TOKEN as repository variables, KRANQ_TOKEN secured
-```
-
-## Forwarding what the task needs
+## One command on the build machine
 
 ```sh
-kranq push infrastructure/ci/tasks/maintenance.yaml --repo dx \
-    -e BITBUCKET_TOKEN \
-    -e MAINTENANCE_SCAN_URL \
-    -e MAINTENANCE_TEST_CMD \
-    --artifacts ./maintenance-output
+kranq setup-git ci-dx --host 142.127.69.2:333 --repo dx
 ```
 
-Bare `-e NAME` forwards the value from the pipeline's environment. A task that
-writes a branch and opens a pull request needs `BITBUCKET_TOKEN` regardless of
-how its source arrived: pushing removes the credential needed to *read* the
-code, not the one needed to write to the git host.
+It authorises a key and prints what the pipeline needs:
+
+```
+KRANQ_PEER=macmini@142.127.69.2:333
+KRANQ_HOST_KEY=[142.127.69.2]:333 ssh-ed25519 AAAAC3Nz…
+KRANQ_SSH_KEY<<EOF
+-----BEGIN OPENSSH PRIVATE KEY-----
+…
+EOF
+```
+
+`KRANQ_PEER` is the only one that must be set. The other two are for a caller
+with no ssh identity of its own; a pipeline that forwards an agent reaching the
+machine needs neither. Set `KRANQ_SSH_KEY` secured.
+
+**Why there is no `receivepack` to configure.** The key is installed as a forced
+command, so ssh runs kranq rather than what git asked for and passes the request
+in `SSH_ORIGINAL_COMMAND`. kranq resolves the repository from that, which is the
+thing the client would otherwise have to be told. It also means the key gets no
+shell:
+
+```
+$ ssh -i ci-dx macmini@142.127.69.2 -p 333 id
+kranq: "id" is not a git command
+```
+
+**The port cannot be discovered from the machine.** The mini answers on 333,
+which is a router forwarding to 22, so sshd sees only 22. `setup-git` reads
+sshd's port, says that it guessed, and takes the real one from `--host`.
+
+## Getting the results back
+
+A run is a branch: the name pushed to is the name pulled from, and when the job
+finishes that ref points at a commit whose parent is the commit that was pushed.
+
+```yaml
+- git push kranq -o task_file=ci/tasks/playwright.yaml "${KRANQ_OPTS[@]}"
+- git pull --ff-only kranq "$KRANQ_TASK"
+- git fetch kranq "$KRANQ_OK"
+artifacts:
+  paths:
+    - playwright/playwright-report/**
+```
+
+The pull brings back files the job changed and whatever it wrote into its
+`artifacts:` path, at the paths it wrote them, so a report ends up where the
+tool that made it already put it and the pipeline's own `artifacts: paths:` can
+name it directly. Nothing is archived, copied or renamed.
+
+It goes **before** the verdict because a report is worth having precisely when
+the run failed.
+
+## Turning a step red
+
+`git push` exits 0 whenever the push was accepted, whatever the task did:
+post-receive runs after the ref has moved and nothing it returns reaches git's
+exit status. Measured, with a task exiting 12, the push exited 0.
+
+So the verdict is a ref. `ok/<run>` exists only if the task succeeded, and
+`git fetch` of a missing ref exits 128.
+
+It cannot be folded into the pull. Measured: `git pull kranq task/<run> ok/<run>`
+with the pass ref missing exits 1 and merges nothing, so a failing run would take
+its own report down with it. The pull always succeeds and the fetch is the check,
+which is why the fetch is last.
 
 ## Retrying a step
 
-The likeliest cause of a duplicated effect is not a network partition, it is
-someone clicking retry on a failed step. For a task with `effects.push` the fence
-handles it: the second attempt cannot claim a fence the first still holds, and it
-stops before building anything.
+Each `kranq-setup` picks its own run name, so a retried step pushes to a ref
+that does not exist yet and always runs. A push to a ref already holding that
+commit is "Everything up-to-date": no hook, no run, and no output to say so.
 
-## Variables
+## The other way in
 
-| Variable | Secured | Required | What for |
-| --- | --- | --- | --- |
-| `KRANQ_ENDPOINT` | no | yes | `ssh://user@host:port` or `https://host` |
-| `KRANQ_TOKEN` | **yes** | https only | a `kranq token create` secret |
-| `KRANQ_SSH_KEY` | **yes** | ssh, if no agent | path to a private key |
-| `KRANQ_REPO` | no | no | defaults from `$BITBUCKET_REPO_SLUG` |
+An ordinary account that can already ssh to the machine can push too, but git
+would ask it for `git-receive-pack '/dx.git'` and that is not a path there. Set
+`KRANQ_REMOTE_BIN` to where kranq lives and `kranq-setup` names it as the
+remote's receive-pack and upload-pack instead.
 
-`$CI_BRANCH` / `$BITBUCKET_BRANCH` is picked up automatically for the branch
-name a run reports.
-
-## Sharing the pipeline definition
-
-Bitbucket can import a pipeline definition from another repository, so a shared
-step can live in `infrastructure` rather than being copy-pasted. Two constraints
-shape how far that goes:
-
-- **`import` replaces the whole pipeline definition.** An imported pipeline
-  cannot be combined with locally defined steps in the same trigger block, so it
-  fits a standalone `custom:` pipeline and not a mixed `pull-requests:` one.
-- **It is a Premium-only feature**, and workspace-scoped. Confirm the plan covers
-  it before depending on it; the fallback is YAML anchors, which work.
-
-A repository can execute an exported configuration even if the caller has no
-access to the exporting repo, so an exported pipeline is effectively readable
-workspace-wide. Never put a secret in one. Variables resolve from the *importing*
-repository, which is what makes one definition work across projects.
+Do not set it for a `setup-git` key. Measured: a fetch with
+`remote.kranq.uploadpack` set on such a key fails with *the repository argument
+is not quoted as git quotes it*, because `--upload` arrives inside
+`SSH_ORIGINAL_COMMAND` and lands in the repository argument.

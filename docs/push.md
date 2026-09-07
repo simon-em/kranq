@@ -110,7 +110,8 @@ losing a line locks you out.
 
 | | simple | forced-command key |
 | --- | --- | --- |
-| setup on the build machine | none | `kranq key add` |
+| setup on the build machine | none | `kranq setup-git`, or `kranq key add` for a key you already have |
+| setup on the client | `KRANQ_REMOTE_BIN`, so kranq is named as the receive-pack | none: a URL and a key |
 | what the pusher can do there | whatever their key already allowed | push and fetch, nothing else |
 | good for | you, from a laptop | a pipeline, a shared credential |
 

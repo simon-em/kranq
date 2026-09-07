@@ -170,3 +170,43 @@ func TestAForcedCommandAcceptsKranqsOwnReceivePack(t *testing.T) {
 		}
 	}
 }
+
+// A client set up for the other way in sends kranq's own flags, and under a
+// forced command the whole string arrives as SSH_ORIGINAL_COMMAND. Measured
+// before this was handled: every fetch failed with "the repository argument is
+// not quoted as git quotes it", because --upload was read as the path.
+func TestKranqsOwnFlagsArriveUnderAForcedCommand(t *testing.T) {
+	cases := map[string]SSHCommand{
+		`$HOME/.local/bin/kranq git-receive '/dx.git'`:                    {Verb: VerbReceive, Repo: "dx"},
+		`$HOME/.local/bin/kranq git-receive --upload '/dx.git'`:           {Verb: VerbUpload, Repo: "dx"},
+		`/Users/macmini/.local/bin/kranq git-receive --name ci '/dx.git'`: {Verb: VerbReceive, Repo: "dx"},
+		`kranq git-receive --name=ci --upload '/dx.git'`:                  {Verb: VerbUpload, Repo: "dx"},
+		`kranq git-upload '/dx.git'`:                                      {Verb: VerbUpload, Repo: "dx"},
+	}
+	for original, want := range cases {
+		got, err := ParseSSHCommand(original)
+		if err != nil {
+			t.Errorf("ParseSSHCommand(%q): %v", original, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("ParseSSHCommand(%q) = %+v, want %+v", original, got, want)
+		}
+	}
+}
+
+// Reading flags must not become a way to smuggle one in. This is the boundary
+// between a key and a shell, so anything unrecognised is refused rather than
+// skipped.
+func TestAnUnknownFlagIsRefusedRatherThanSkipped(t *testing.T) {
+	for _, original := range []string{
+		`kranq git-receive --exec=/bin/sh '/dx.git'`,
+		`kranq git-receive -o ProxyCommand=id '/dx.git'`,
+		`kranq git-receive --upload-pack=/bin/sh '/dx.git'`,
+		`kranq git-receive --name`,
+	} {
+		if got, err := ParseSSHCommand(original); err == nil {
+			t.Errorf("ParseSSHCommand(%q) = %+v, want a refusal", original, got)
+		}
+	}
+}

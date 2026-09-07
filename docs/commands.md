@@ -105,6 +105,33 @@ indistinguishable from a failed build unless you ask again. This is how the push
 client rejoins: it captures the id from `task <id> queued` and asks over a fresh
 connection rather than guessing.
 
+### `kranq setup-git [name]`
+
+Run on the build machine. Authorises an ssh key and prints what a client needs,
+which is a URL and a key and nothing else.
+
+```sh
+kranq setup-git ci-dx --host 142.127.69.2:333 --repo dx
+```
+
+| Flag | What |
+| --- | --- |
+| `--host [user@]host[:port]` | the address a client reaches this machine at |
+| `--port N` | the port, if it is not in `--host` |
+| `--repo NAME` | create the repository now rather than on first push |
+| `--key FILE` | authorise this public key instead of generating one |
+
+Variables go to stdout, narration to stderr, so `> vars.env` is a file. The
+private key is printed once and kept nowhere; run it again to rotate.
+
+The key is installed as a forced command, so it can push and fetch and do
+nothing else — no shell, no agent forwarding, no port forwarding. That is also
+what removes the client-side `receivepack` and `uploadpack` overrides: ssh puts
+what git asked for in `SSH_ORIGINAL_COMMAND` and kranq resolves the repository.
+
+**The port cannot be discovered here.** A machine reached through a forwarded
+port sees only its own, so `setup-git` reads sshd's and says that it guessed.
+
 ### `kranq fetch <id> [--out DIR]`
 
 ```sh
