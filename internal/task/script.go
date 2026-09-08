@@ -3,6 +3,7 @@ package task
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"sort"
 	"strings"
 )
@@ -156,6 +157,14 @@ func BuildScript(s Spec, env map[string]string) string {
 		}
 	}
 
+	if len(s.Files) > 0 {
+		b.WriteString("\n")
+		fmt.Fprintf(&b, "ci_step %s\n", shellQuote("stage files"))
+		for i, f := range s.Files {
+			writeFileStaging(&b, i, f)
+		}
+	}
+
 	for i, st := range s.Steps {
 		name := st.Name
 		if name == "" {
@@ -172,6 +181,17 @@ func BuildScript(s Spec, env map[string]string) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+func writeFileStaging(b *strings.Builder, index int, f File) {
+	delim := fmt.Sprintf("CI_FILE_%d", index)
+	mode := f.Mode
+	if mode == "" {
+		mode = "0644"
+	}
+	fmt.Fprintf(b, "mkdir -p %s\n", shellQuote(path.Dir(f.Path)))
+	fmt.Fprintf(b, "base64 -d > %s <<'%s'\n%s\n%s\n", shellQuote(f.Path), delim, f.Content, delim)
+	fmt.Fprintf(b, "chmod %s %s\n", mode, shellQuote(f.Path))
 }
 
 func stepBody(st Step, index int) string {

@@ -78,6 +78,39 @@ returns. A known reset time is used if the stream reported one; otherwise the
 gate is re-checked on a flat interval. Rotating the token opens the gate at once,
 because the gate is keyed by a hash of the token.
 
+## Files, for a task that brings its own tools
+
+`mcp_servers:` (above) configures a server — command, args, env — but says
+nothing about how that command's own file gets into the VM. `files:` answers
+that, generically, for anything a step needs on disk before it runs:
+
+```yaml
+files:
+  - path: /opt/task/mcp/kman-ask.py
+    mode: "0755"
+    content: <base64>
+
+steps:
+  - name: review the diff
+    claude: Review the changes and ask if anything is unclear.
+    mcp_servers:
+      kman-ask:
+        command: python3
+        args: [/opt/task/mcp/kman-ask.py]
+```
+
+Every entry in `files:` is written before any step runs — `path` (required),
+an optional `mode` (octal, e.g. `"0755"`; defaults to `0644`), and `content`
+as base64, capped at 1MiB decoded. Parent directories are created as needed.
+A path containing `..` is refused.
+
+This is deliberately generic, not MCP-specific: a `run:` step can rely on a
+staged file too. It also means a task no longer has to depend on whatever
+kranq happens to have embedded at build time (`assets/mcp/bitbucket-mcp.py`,
+copied into every VM unconditionally) — a task can carry its own MCP server,
+or any other tool, as `files:` content instead. The embedded default still
+exists for tasks that don't specify their own.
+
 ## Effects, for a task that changes something
 
 A task that pushes a branch and opens a pull request must do it at most once,

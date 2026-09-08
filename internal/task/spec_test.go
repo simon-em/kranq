@@ -1,6 +1,9 @@
 package task
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParseRejectsInvalidSpecs(t *testing.T) {
 	cases := map[string]string{
@@ -98,5 +101,52 @@ func TestMCPServerNeedsACommand(t *testing.T) {
 	spec := "name: x\nrepo: dx\nsteps:\n  - claude: hi\n    mcp_servers:\n      bb:\n        args: [a]\n"
 	if _, err := Parse([]byte(spec)); err == nil {
 		t.Error("an mcp server without a command should be rejected")
+	}
+}
+
+func TestParseAcceptsFiles(t *testing.T) {
+	spec := "name: x\nrepo: dx\nfiles:\n  - path: /opt/kman/mcp/kman-ask.py\n    mode: \"0755\"\n    content: aGVsbG8gZnJvbSBrbWFuCg==\nsteps:\n  - run: true\n"
+	s, err := Parse([]byte(spec))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(s.Files) != 1 || s.Files[0].Path != "/opt/kman/mcp/kman-ask.py" || s.Files[0].Mode != "0755" {
+		t.Errorf("Files = %+v", s.Files)
+	}
+}
+
+func TestParseRejectsFileWithoutAPath(t *testing.T) {
+	spec := "name: x\nrepo: dx\nfiles:\n  - content: aGk=\nsteps:\n  - run: true\n"
+	if _, err := Parse([]byte(spec)); err == nil {
+		t.Error("a file with no path should be rejected")
+	}
+}
+
+func TestParseRejectsFilePathTraversal(t *testing.T) {
+	spec := "name: x\nrepo: dx\nfiles:\n  - path: /opt/../etc/passwd\n    content: aGk=\nsteps:\n  - run: true\n"
+	if _, err := Parse([]byte(spec)); err == nil {
+		t.Error("a file path containing .. should be rejected")
+	}
+}
+
+func TestParseRejectsFileWithInvalidMode(t *testing.T) {
+	spec := "name: x\nrepo: dx\nfiles:\n  - path: /opt/x\n    mode: rwx\n    content: aGk=\nsteps:\n  - run: true\n"
+	if _, err := Parse([]byte(spec)); err == nil {
+		t.Error("a non-octal mode should be rejected")
+	}
+}
+
+func TestParseRejectsFileWithInvalidBase64(t *testing.T) {
+	spec := "name: x\nrepo: dx\nfiles:\n  - path: /opt/x\n    content: \"not base64!!\"\nsteps:\n  - run: true\n"
+	if _, err := Parse([]byte(spec)); err == nil {
+		t.Error("non-base64 content should be rejected")
+	}
+}
+
+func TestParseRejectsFileOverTheSizeLimit(t *testing.T) {
+	huge := strings.Repeat("AAAA", MaxFileSize/3+10)
+	spec := "name: x\nrepo: dx\nfiles:\n  - path: /opt/x\n    content: " + huge + "\nsteps:\n  - run: true\n"
+	if _, err := Parse([]byte(spec)); err == nil {
+		t.Error("content over MaxFileSize should be rejected")
 	}
 }

@@ -281,6 +281,61 @@ func TestStreamedToolCallsReachTheLog(t *testing.T) {
 	}
 }
 
+func TestFilesAreStagedBeforeSteps(t *testing.T) {
+	dir := t.TempDir()
+	yaml := "name: x\nrepo: dx\nfiles:\n  - path: " + dir + "/staged/hello.txt\n    mode: \"0755\"\n    content: aGVsbG8gZnJvbSBrbWFuCg==\nsteps:\n  - name: check\n    run: |\n      test -x " + dir + "/staged/hello.txt\n      cat " + dir + "/staged/hello.txt\n"
+	script := build(t, yaml, nil)
+
+	cmd := exec.Command("bash")
+	cmd.Stdin = strings.NewReader(script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("script failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "hello from kman") {
+		t.Errorf("staged file content wrong:\n%s", out)
+	}
+}
+
+func TestFilesDefaultModeIs0644(t *testing.T) {
+	dir := t.TempDir()
+	yaml := "name: x\nrepo: dx\nfiles:\n  - path: " + dir + "/plain.txt\n    content: aGVsbG8gZnJvbSBrbWFuCg==\nsteps:\n  - name: check\n    run: |\n      stat -f '%Lp' " + dir + "/plain.txt || stat -c '%a' " + dir + "/plain.txt\n"
+	script := build(t, yaml, nil)
+
+	cmd := exec.Command("bash")
+	cmd.Stdin = strings.NewReader(script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("script failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "644") {
+		t.Errorf("default mode was not 0644:\n%s", out)
+	}
+}
+
+func TestFilesCreateParentDirectories(t *testing.T) {
+	dir := t.TempDir()
+	yaml := "name: x\nrepo: dx\nfiles:\n  - path: " + dir + "/a/b/c/deep.txt\n    content: aGVsbG8gZnJvbSBrbWFuCg==\nsteps:\n  - name: check\n    run: cat " + dir + "/a/b/c/deep.txt\n"
+	script := build(t, yaml, nil)
+
+	cmd := exec.Command("bash")
+	cmd.Stdin = strings.NewReader(script)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("script failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "hello from kman") {
+		t.Errorf("nested file was not staged:\n%s", out)
+	}
+}
+
+func TestNoFilesMeansNoStagingStep(t *testing.T) {
+	script := build(t, "name: x\nrepo: dx\nsteps:\n  - run: true\n", nil)
+	if strings.Contains(script, "stage files") {
+		t.Errorf("a spec with no files should not emit a staging step:\n%s", script)
+	}
+}
+
 func TestExhaustionEmitsTheResetTimeForTheScheduler(t *testing.T) {
 	dir := t.TempDir()
 	fake := "#!/usr/bin/env bash\n" +

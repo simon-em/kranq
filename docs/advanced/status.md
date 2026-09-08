@@ -29,6 +29,13 @@ https or ssh, push options carry the task and the forwarded env, and the run
 streams back to the pushing terminal. Named tokens for https, forced-command ssh
 keys for ssh. See [push.md](push.md).
 
+**`files:`**, not part of the original phase plan. A task-level `path`/`mode`/
+`content` list, staged before any step runs, so a task can carry its own MCP
+server (or any other tool) instead of depending on the embedded
+`assets/mcp/*`. Added to unblock an external consumer (`kman`) that needs to
+inject its own per-run tooling without a kranq release for every one; see
+[tasks.md](../tasks.md#files-for-a-task-that-brings-its-own-tools).
+
 ## Verified on real hardware
 
 Not merely tested. These were run against actual machines.

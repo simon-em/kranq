@@ -1,6 +1,7 @@
 package task
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"regexp"
@@ -42,6 +43,14 @@ type Effects struct {
 	Scope string `yaml:"scope"`
 }
 
+const MaxFileSize = 1 << 20
+
+type File struct {
+	Path    string `yaml:"path"`
+	Mode    string `yaml:"mode"`
+	Content string `yaml:"content"`
+}
+
 type Spec struct {
 	Name      string            `yaml:"name"`
 	Repo      string            `yaml:"repo"`
@@ -51,6 +60,7 @@ type Spec struct {
 	Artifacts string            `yaml:"artifacts"`
 	Resources Resources         `yaml:"resources"`
 	Env       map[string]string `yaml:"env"`
+	Files     []File            `yaml:"files"`
 	Effects   Effects           `yaml:"effects"`
 	Steps     []Step            `yaml:"steps"`
 }
@@ -116,7 +126,34 @@ func (s Spec) validate() error {
 			return err
 		}
 	}
+	for i, f := range s.Files {
+		if err := f.validate(); err != nil {
+			return fmt.Errorf("files[%d] (%s): %w", i, f.Path, err)
+		}
+	}
 	return s.Effects.validate()
+}
+
+func (f File) validate() error {
+	if f.Path == "" {
+		return errors.New("needs a path")
+	}
+	if strings.Contains(f.Path, "..") {
+		return fmt.Errorf("path %q must not contain \"..\"", f.Path)
+	}
+	if f.Mode != "" {
+		if _, err := strconv.ParseUint(f.Mode, 8, 32); err != nil {
+			return fmt.Errorf("mode %q is not valid octal", f.Mode)
+		}
+	}
+	decoded, err := base64.StdEncoding.DecodeString(f.Content)
+	if err != nil {
+		return fmt.Errorf("content is not base64: %w", err)
+	}
+	if len(decoded) > MaxFileSize {
+		return fmt.Errorf("is %d bytes, over the %d byte limit", len(decoded), MaxFileSize)
+	}
+	return nil
 }
 
 var validEffectScopes = map[string]bool{"": true, "branch": true, "repo": true}

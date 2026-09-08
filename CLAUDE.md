@@ -72,6 +72,17 @@ the same machine. A test asserts a `ci-run-*` instance is not claimed.
 step 3. Real tasks depend on this: `maintenance.yaml` sets `PR_BRANCH` in step 1 and reads it
 in step 4. `internal/task` has a test pinning it.
 
+**`files:` is how a task gets its own tool into the VM, not `mcp_servers:`.** `mcp_servers:`
+only configures a server (command, args, env); it says nothing about how that command's file
+gets onto disk. Before `files:` existed, the only way was `assets/mcp/*` (go:embed'd,
+unconditionally copied into every VM at a fixed path) or a Kranqfile `COPY` (a build-time
+layer, too heavy for a per-run script). `files:` fixes the actual gap: a task-level list of
+`path`/`mode`/`content` (base64, capped at `task.MaxFileSize`), staged by a bash block
+`BuildScript` emits before any step runs (`internal/task/script.go`'s `writeFileStaging`).
+This is deliberately generic, not MCP-specific, and it is what lets a task carry its own MCP
+server instead of depending on whatever kranq happened to embed at build time — see
+[docs/tasks.md](docs/tasks.md).
+
 **Every Claude stream carries a `rate_limit_event`, even a perfectly healthy one.** Detecting
 exhaustion by matching the text `rate_limit` would therefore mark every task exhausted and
 wedge the gate permanently. Match on `rate_limit_info.status != "allowed"` instead. The
