@@ -234,3 +234,35 @@ func TestTheThingsThatReachTheGitHostStillNeedAName(t *testing.T) {
 		t.Errorf("err = %v, want it to say it has to clone", err)
 	}
 }
+
+// The build machine need hold no claude token: a pipeline has its own
+// credentials, and refusing the task because the *machine* has none was
+// checking the wrong place. Reported as "this task has a claude step but the
+// runner has no CLAUDE_CODE_OAUTH_TOKEN" on a push that carried one.
+func TestAForwardedClaudeTokenSatisfiesTheCheck(t *testing.T) {
+	spec := []byte("name: t\nsteps:\n  - claude: review this\n")
+	_, err := Prepare(SubmitRequest{
+		SpecYAML:     spec,
+		SourceCommit: "34a81a770e52",
+		Env:          map[string]string{ClaudeTokenVar: "sk-ant-oat-example"},
+	}, Capabilities{HasClaudeToken: false}, time.Now(), "id-6")
+	if err != nil {
+		t.Fatalf("a push carrying its own token was refused: %v", err)
+	}
+}
+
+// With neither, the refusal has to name both places, or the reader adds the
+// token to the one that was already fine.
+func TestWithNeitherTokenTheRefusalNamesBoth(t *testing.T) {
+	spec := []byte("name: t\nsteps:\n  - claude: review this\n")
+	_, err := Prepare(SubmitRequest{SpecYAML: spec, SourceCommit: "abc"},
+		Capabilities{HasClaudeToken: false}, time.Now(), "id-7")
+	if err == nil {
+		t.Fatal("a claude task was accepted with no token anywhere")
+	}
+	for _, want := range []string{"runner", "this push"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to mention %q", err, want)
+		}
+	}
+}

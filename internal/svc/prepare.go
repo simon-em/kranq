@@ -20,6 +20,10 @@ func errf(code int, format string, args ...any) *Error {
 	return &Error{Code: code, Msg: fmt.Sprintf(format, args...)}
 }
 
+// ClaudeTokenVar is the one name a task may bring its own copy of, because it
+// is the one credential kranq itself injects.
+const ClaudeTokenVar = "CLAUDE_CODE_OAUTH_TOKEN"
+
 type Capabilities struct {
 	HasClaudeToken bool
 	TotalMemory    int64
@@ -64,9 +68,14 @@ func Prepare(req SubmitRequest, caps Capabilities, now time.Time, id string) (st
 					"Push with -o branch=<name>, or name one in the spec", why)
 		}
 	}
-	if spec.NeedsClaude() && !caps.HasClaudeToken {
+	// A forwarded token counts. The caller may be the only one that has one --
+	// a pipeline holds its own credentials and the build machine need hold
+	// none -- and refusing it because the *machine* has nothing was checking
+	// the wrong place.
+	if spec.NeedsClaude() && !caps.HasClaudeToken && req.Env[ClaudeTokenVar] == "" {
 		return state.Task{}, errf(exitcode.Misconfigured,
-			"this task has a claude step but the runner has no CLAUDE_CODE_OAUTH_TOKEN")
+			"this task has a claude step and neither the runner nor this push "+
+				"has a CLAUDE_CODE_OAUTH_TOKEN")
 	}
 
 	memory := spec.MemoryBytes()

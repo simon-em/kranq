@@ -10,6 +10,7 @@ import (
 	"github.com/simon-em/kranq/internal/gate"
 	"github.com/simon-em/kranq/internal/hostres"
 	"github.com/simon-em/kranq/internal/state"
+	"github.com/simon-em/kranq/internal/svc"
 	"github.com/simon-em/kranq/internal/task"
 )
 
@@ -184,7 +185,10 @@ func (s *Scheduler) Tick(ctx context.Context) {
 			s.setStopReason(fmt.Sprintf("all %d vm slots are in use", s.cfg.MaxVMs))
 			return
 		}
-		if t.NeedsClaude && !s.gate.Available() {
+		// The gate records that *this machine's* token is exhausted. A task
+		// that brought its own is not spending that budget, so holding it back
+		// would be waiting on something that does not apply to it.
+		if t.NeedsClaude && t.Env[svc.ClaudeTokenVar] == "" && !s.gate.Available() {
 			s.block(t, state.BlockedOnClaude)
 			continue
 		}
@@ -262,8 +266,11 @@ func (s *Scheduler) execute(ctx context.Context, t state.Task) {
 	for k, v := range t.Env {
 		env[k] = v
 	}
-	if spec.NeedsClaude() && s.cfg.ClaudeToken != "" {
-		env["CLAUDE_CODE_OAUTH_TOKEN"] = s.cfg.ClaudeToken
+	// Only when the caller brought none. A pipeline that forwards its own token
+	// is spending its own usage, and overwriting it with the machine's would
+	// silently run the task as somebody else.
+	if spec.NeedsClaude() && env[svc.ClaudeTokenVar] == "" && s.cfg.ClaudeToken != "" {
+		env[svc.ClaudeTokenVar] = s.cfg.ClaudeToken
 	}
 
 	logFile, err := s.openLog(t.ID)
@@ -309,7 +316,10 @@ func (s *Scheduler) settle(ctx context.Context, t state.Task, logFile *os.File, 
 		return
 	}
 
-	if code == task.RateLimitExitCode && t.NeedsClaude {
+	// Only the machine's own token has a gate here. A run that brought its own
+	// exhausted somebody else's budget, and closing this gate would hold back
+	// every task that uses the machine's for a window it is not in.
+	if code == task.RateLimitExitCode && t.NeedsClaude && ownToken(t) {
 		resetsAt, window, _ := gate.ParseExhaustion(s.tailLog(t.ID))
 		until := s.gate.MarkExhaustedUntil(resetsAt, window)
 		if resetsAt.IsZero() {
@@ -327,7 +337,7 @@ func (s *Scheduler) settle(ctx context.Context, t state.Task, logFile *os.File, 
 		})
 		return
 	}
-	if t.NeedsClaude && code == 0 {
+	if t.NeedsClaude && code == 0 && ownToken(t) {
 		s.gate.MarkHealthy()
 	}
 
@@ -388,6 +398,9 @@ func (s *Scheduler) Cancel(id string) error {
 	})
 	return err
 }
+
+// Whether the run spent the machine's claude usage rather than the caller's.
+func ownToken(t state.Task) bool { return t.Env[svc.ClaudeTokenVar] == "" }
 
 func (s *Scheduler) tailLog(id string) string {
 	data, err := os.ReadFile(s.store.LogPath(id))

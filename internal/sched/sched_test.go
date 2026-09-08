@@ -13,6 +13,7 @@ import (
 	"github.com/simon-em/kranq/internal/gate"
 	"github.com/simon-em/kranq/internal/hostres"
 	"github.com/simon-em/kranq/internal/state"
+	"github.com/simon-em/kranq/internal/svc"
 	"github.com/simon-em/kranq/internal/task"
 )
 
@@ -491,5 +492,17 @@ func TestReadoptionDoesNotHandTheJobAFreshTimeout(t *testing.T) {
 	}
 	if got := s.remaining(state.Task{}); got != time.Hour {
 		t.Fatalf("remaining = %s; a job with no start time gets the full budget", got)
+	}
+}
+
+// The machine's token must not overwrite one the caller forwarded, or the task
+// silently runs as somebody else and spends the wrong usage.
+func TestAForwardedClaudeTokenIsNotOverwritten(t *testing.T) {
+	env := map[string]string{svc.ClaudeTokenVar: "callers-token"}
+	if !ownToken(state.Task{}) {
+		t.Error("a task with no token of its own was not treated as using the machine's")
+	}
+	if ownToken(state.Task{Env: env}) {
+		t.Error("a task carrying its own token was treated as spending the machine's")
 	}
 }
